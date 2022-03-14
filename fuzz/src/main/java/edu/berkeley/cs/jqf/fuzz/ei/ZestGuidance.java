@@ -41,22 +41,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.time.Duration;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Date;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
+import de.hub.se.jqf.fuzz.div.DivMetricsCounter;
+import de.hub.se.jqf.fuzz.junit.quickcheck.tracking.ChoiceType;
 import edu.berkeley.cs.jqf.fuzz.guidance.Guidance;
 import edu.berkeley.cs.jqf.fuzz.guidance.GuidanceException;
 import edu.berkeley.cs.jqf.fuzz.guidance.Result;
@@ -105,6 +96,9 @@ public class ZestGuidance implements Guidance {
     /** The directory where saved inputs are saved. */
     protected File savedFailuresDirectory;
 
+    /** The directory where failure stack traces are saved. */
+    protected File failureStatsDirectory;
+
     /** The directory where all generated inputs are logged in sub-directories (if enabled). */
     protected File allInputsDirectory;
 
@@ -151,6 +145,24 @@ public class ZestGuidance implements Guidance {
     /** Cumulative coverage for valid inputs. */
     protected Coverage validCoverage = new Coverage();
 
+    /** Set of hashes of all valid inputs generated so far. */
+    protected Set<Integer> uniqueValidInputs = new HashSet<>();
+
+    /** Set of hashes of all paths generated so far. */
+    protected Set<Integer> uniquePaths = new HashSet<>();
+
+    /** Set of hashes of all valid paths generated so far. */
+    protected Set<Integer> uniqueValidPaths = new HashSet<>();
+
+    /** Set of hashes of all valid branch sets generated so far. */
+    protected Set<Integer> uniqueBranchSets = new HashSet<>();
+
+    /** Coverage diversity metrics for all unique paths. */
+    protected DivMetricsCounter uniquePathsDivMetricsCounter = new DivMetricsCounter();
+
+    /** Hash code of last args generated. */
+    protected int lastGeneratedInputsHash;
+
     /** The maximum number of keys covered by any single input found so far. */
     protected int maxCoverage = 0;
 
@@ -181,7 +193,7 @@ public class ZestGuidance implements Guidance {
     protected long lastNumTrials = 0;
 
     /** Minimum amount of time (in millis) between two stats refreshes. */
-    protected final long STATS_REFRESH_TIME_PERIOD = 300;
+    protected final long STATS_REFRESH_TIME_PERIOD = Integer.getInteger("jqf.guidance.STATS_REFRESH_TIME_PERIOD", 300);
 
     /** The file where log data is written. */
     protected File logFile;
@@ -192,8 +204,14 @@ public class ZestGuidance implements Guidance {
     /** The currently executing input (for debugging purposes). */
     protected File currentInputFile;
 
-    /** The file contianing the coverage information */ 
+    /** The file containing the coverage information */
     protected File coverageFile;
+
+    /** The file containing the coverage information */
+    protected File validCoverageFile;
+
+    /** The file containing the branch hit counts */
+    protected File branchCountsFile;
 
     /** Use libFuzzer like output instead of AFL like stats screen (https://llvm.org/docs/LibFuzzer.html#output) **/
     protected final boolean LIBFUZZER_COMPAT_OUTPUT = Boolean.getBoolean("jqf.ei.LIBFUZZER_COMPAT_OUTPUT");
@@ -203,6 +221,9 @@ public class ZestGuidance implements Guidance {
 
     /** Whether to store all generated inputs to disk (can get slowww!) */
     protected final boolean LOG_ALL_INPUTS = Boolean.getBoolean("jqf.ei.LOG_ALL_INPUTS");
+
+    /** Whether to save all stats on valid structures to disk (introduces considerable overhead)*/
+    protected final boolean LOG_ALL_VALID_COVERAGE = Boolean.getBoolean("jqf.div.LOG_ALL_VALID_COVERAGE");
 
     // ------------- TIMEOUT HANDLING ------------
 
@@ -256,8 +277,7 @@ public class ZestGuidance implements Guidance {
     protected final boolean STEAL_RESPONSIBILITY = Boolean.getBoolean("jqf.ei.STEAL_RESPONSIBILITY");
 
     /**
-     * Creates a new Zest guidance instance with optional duration,
-     * optional trial limit, and possibly deterministic PRNG.
+     * Creates a new guidance instance.
      *
      * @param testName the name of test to display on the status screen
      * @param duration the amount of time to run fuzzing for, where
@@ -272,6 +292,7 @@ public class ZestGuidance implements Guidance {
         this.random = sourceOfRandomness;
         this.testName = testName;
         this.maxDurationMillis = duration != null ? duration.toMillis() : Long.MAX_VALUE;
+        trials = Long.getLong("jqf.guidance.MAX_TRIALS");
         this.maxTrials = trials != null ? trials : Long.MAX_VALUE;
         this.outputDirectory = outputDirectory;
         this.blind = Boolean.getBoolean("jqf.ei.TOTALLY_RANDOM");
@@ -291,8 +312,7 @@ public class ZestGuidance implements Guidance {
     }
 
     /**
-     * Creates a new Zest guidance instance with seed input files and optional
-     * duration, optional trial limit, an possibly deterministic PRNG.
+     * Creates a new guidance instance.
      *
      * @param testName the name of test to display on the status screen
      * @param duration the amount of time to run fuzzing for, where
@@ -314,8 +334,7 @@ public class ZestGuidance implements Guidance {
     }
 
     /**
-     * Creates a new Zest guidance instance with seed input directory and optional
-     * duration, optional trial limit, an possibly deterministic PRNG.
+     * Creates a new guidance instance.
      *
      * @param testName the name of test to display on the status screen
      * @param duration the amount of time to run fuzzing for, where
@@ -331,49 +350,6 @@ public class ZestGuidance implements Guidance {
         this(testName, duration, trials, outputDirectory, IOUtils.resolveInputFileOrDirectory(seedInputDir), sourceOfRandomness);
     }
 
-    /**
-     * Creates a new Zest guidance instance with seed inputs and
-     * optional duration.
-     *
-     * @param testName the name of test to display on the status screen
-     * @param duration the amount of time to run fuzzing for, where
-     *                 {@code null} indicates unlimited time.
-     * @param outputDirectory the directory where fuzzing results will be written
-     * @param seedInputDir the directory containing one or more input files to be used as initial inputs
-     * @throws IOException if the output directory could not be prepared
-     */
-    public ZestGuidance(String testName, Duration duration, File outputDirectory, File seedInputDir) throws IOException {
-        this(testName, duration, null, outputDirectory, seedInputDir, new Random());
-    }
-
-    /**
-     * Creates a new Zest guidance instance with seed inputs and
-     * optional duration.
-     *
-     * @param testName the name of test to display on the status screen
-     * @param duration the amount of time to run fuzzing for, where
-     *                 {@code null} indicates unlimited time.
-     * @param outputDirectory the directory where fuzzing results will be written
-     * @throws IOException if the output directory could not be prepared
-     */
-    public ZestGuidance(String testName, Duration duration, File outputDirectory) throws IOException {
-        this(testName, duration, null, outputDirectory, new Random());
-    }
-
-    /**
-     * Creates a new Zest guidance instance with seed inputs and
-     * optional duration.
-     *
-     * @param testName the name of test to display on the status screen
-     * @param duration the amount of time to run fuzzing for, where
-     *                 {@code null} indicates unlimited time.
-     * @param outputDirectory the directory where fuzzing results will be written
-     * @throws IOException if the output directory could not be prepared
-     */
-    public ZestGuidance(String testName, Duration duration, File outputDirectory, File[] seedFiles) throws IOException {
-        this(testName, duration, null, outputDirectory, seedFiles, new Random());
-    }
-
     private void prepareOutputDirectory() throws IOException {
         // Create the output directory if it does not exist
         IOUtils.createDirectory(outputDirectory);
@@ -381,16 +357,21 @@ public class ZestGuidance implements Guidance {
         // Name files and directories after AFL
         this.savedCorpusDirectory = IOUtils.createDirectory(outputDirectory, "corpus");
         this.savedFailuresDirectory = IOUtils.createDirectory(outputDirectory, "failures");
+        this.failureStatsDirectory = IOUtils.createDirectory(outputDirectory, "failure_info");
         if (LOG_ALL_INPUTS) {
             this.allInputsDirectory = IOUtils.createDirectory(outputDirectory, "all");
             IOUtils.createDirectory(allInputsDirectory, "success");
             IOUtils.createDirectory(allInputsDirectory, "invalid");
             IOUtils.createDirectory(allInputsDirectory, "failure");
+            IOUtils.createDirectory(allInputsDirectory, "failure_info");
         }
         this.statsFile = new File(outputDirectory, "plot_data");
         this.logFile = new File(outputDirectory, "fuzz.log");
         this.currentInputFile = new File(outputDirectory, ".cur_input");
         this.coverageFile = new File(outputDirectory, "coverage_hash");
+        this.validCoverageFile = new File(outputDirectory, "valid_coverage");
+        this.branchCountsFile = new File(outputDirectory, "branch_counts");
+
 
         // Delete everything that we may have created in a previous run.
         // Trying to stay away from recursive delete of parent output directory in case there was a
@@ -399,10 +380,15 @@ public class ZestGuidance implements Guidance {
         statsFile.delete();
         logFile.delete();
         coverageFile.delete();
+        validCoverageFile.delete();
+        branchCountsFile.delete();
         for (File file : savedCorpusDirectory.listFiles()) {
             file.delete();
         }
         for (File file : savedFailuresDirectory.listFiles()) {
+            file.delete();
+        }
+        for (File file : failureStatsDirectory.listFiles()) {
             file.delete();
         }
 
@@ -410,8 +396,9 @@ public class ZestGuidance implements Guidance {
     }
 
     protected String getStatNames() {
-        return "# unix_time, cycles_done, cur_path, paths_total, pending_total, " +
-            "pending_favs, map_size, unique_crashes, unique_hangs, max_depth, execs_per_sec, valid_inputs, invalid_inputs, valid_cov";
+        return "# unix_time, unique_crashes, total_cov, valid_cov, total_inputs, " +
+                "valid_inputs, valid_paths, valid_branch_sets, unique_valid_inputs, " +
+                "b0, b1, b2";
     }
 
     /* Writes a line of text to a given log file. */
@@ -421,7 +408,6 @@ public class ZestGuidance implements Guidance {
         } catch (IOException e) {
             throw new GuidanceException(e);
         }
-
     }
 
     /* Writes a line of text to the log file. */
@@ -453,10 +439,10 @@ public class ZestGuidance implements Guidance {
     }
 
     // Call only if console exists
-    protected void displayStats(boolean force) {
+    protected void displayStats() {
         Date now = new Date();
         long intervalMilliseconds = now.getTime() - lastRefreshTime.getTime();
-        if (intervalMilliseconds < STATS_REFRESH_TIME_PERIOD && !force) {
+        if (intervalMilliseconds < STATS_REFRESH_TIME_PERIOD) {
             return;
         }
         long interlvalTrials = numTrials - lastNumTrials;
@@ -483,6 +469,8 @@ public class ZestGuidance implements Guidance {
         int nonZeroValidCount = validCoverage.getNonZeroCount();
         double nonZeroValidFraction = nonZeroValidCount * 100.0 / validCoverage.size();
 
+        double[] uniquePathsDivMetrics = uniquePathsDivMetricsCounter.getCachedMetrics(now);
+
         if (console != null) {
             if (LIBFUZZER_COMPAT_OUTPUT) {
                 console.printf("#%,d\tNEW\tcov: %,d exec/s: %,d L: %,d\n", numTrials, nonZeroValidCount, intervalExecsPerSec, currentInput.size());
@@ -507,14 +495,21 @@ public class ZestGuidance implements Guidance {
                 console.printf("Execution speed:      %,d/sec now | %,d/sec overall\n", intervalExecsPerSec, execsPerSec);
                 console.printf("Total coverage:       %,d branches (%.2f%% of map)\n", nonZeroCount, nonZeroFraction);
                 console.printf("Valid coverage:       %,d branches (%.2f%% of map)\n", nonZeroValidCount, nonZeroValidFraction);
+                console.printf("Unique valid inputs:  %,d (%.2f%%)\n", uniqueValidInputs.size(),
+                        uniqueValidInputs.size()*100.0/numTrials);
+                console.printf("Unique valid paths:   %,d \n", uniqueValidPaths.size());
+                console.printf("''  non-zero paths:   %,d \n", uniqueBranchSets.size());
             }
         }
 
-        String plotData = String.format("%d, %d, %d, %d, %d, %d, %.2f%%, %d, %d, %d, %.2f, %d, %d, %.2f%%",
-                TimeUnit.MILLISECONDS.toSeconds(now.getTime()), cyclesCompleted, currentParentInputIdx,
-                numSavedInputs, 0, 0, nonZeroFraction, uniqueFailures.size(), 0, 0, intervalExecsPerSecDouble,
-                numValid, numTrials-numValid, nonZeroValidFraction);
+        String plotData = String.format("%d, %d, %d, %d, %d, %d, %d, %d, %d, %.3f, %.3f, %.3f",
+                TimeUnit.MILLISECONDS.toSeconds(now.getTime()), uniqueFailures.size(), nonZeroCount, nonZeroValidCount,
+                numTrials, numValid, uniqueValidPaths.size(), uniqueBranchSets.size(), uniqueValidInputs.size(),
+                uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2]
+        );
+
         appendLineToFile(statsFile, plotData);
+
     }
 
     /** Updates the data in the coverage file */ 
@@ -565,22 +560,22 @@ public class ZestGuidance implements Guidance {
     protected void completeCycle() {
         // Increment cycle count
         cyclesCompleted++;
-        infoLog("\n# Cycle " + cyclesCompleted + " completed.");
+        //infoLog("\n# Cycle " + cyclesCompleted + " completed.");
 
         // Go over all inputs and do a sanity check (plus log)
-        infoLog("Here is a list of favored inputs:");
+        //infoLog("Here is a list of favored inputs:");
         int sumResponsibilities = 0;
         numFavoredLastCycle = 0;
         for (Input input : savedInputs) {
             if (input.isFavored()) {
                 int responsibleFor = input.responsibilities.size();
-                infoLog("Input %d is responsible for %d branches", input.id, responsibleFor);
+                //infoLog("Input %d is responsible for %d branches", input.id, responsibleFor);
                 sumResponsibilities += responsibleFor;
                 numFavoredLastCycle++;
             }
         }
         int totalCoverageCount = totalCoverage.getNonZeroCount();
-        infoLog("Total %d branches covered", totalCoverageCount);
+        //infoLog("Total %d branches covered", totalCoverageCount);
         if (sumResponsibilities != totalCoverageCount) {
             if (multiThreaded) {
                 infoLog("Warning: other threads are adding coverage between test executions");
@@ -590,7 +585,7 @@ public class ZestGuidance implements Guidance {
         }
 
         // Break log after cycle
-        infoLog("\n\n\n");
+        //infoLog("\n\n\n");
     }
 
     /**
@@ -702,9 +697,14 @@ public class ZestGuidance implements Guidance {
             && numTrials < maxTrials) {
             return true;
         } else {
-            displayStats(true);
+            displayStats();
             return false;
         }
+    }
+
+    @Override
+    public void observeGeneratedArgs(Object[] args) {
+        this.lastGeneratedInputsHash = Arrays.hashCode(args);
     }
 
     @Override
@@ -718,9 +718,26 @@ public class ZestGuidance implements Guidance {
 
             boolean valid = result == Result.SUCCESS;
 
+            if (uniquePaths.add(runCoverage.hashCode())) {
+                uniquePathsDivMetricsCounter.incrementBranchCounts(runCoverage);
+            }
+
+
             if (valid) {
                 // Increment valid counter
                 numValid++;
+
+                // Add to unique
+                uniqueValidInputs.add(lastGeneratedInputsHash);
+                uniqueValidPaths.add(runCoverage.hashCode());
+
+                // Add to coverage file
+                if (LOG_ALL_VALID_COVERAGE) {
+                    String branchesCovered = runCoverage.getCovered().stream()
+                            .map(String::valueOf)
+                            .collect(Collectors.joining(","));
+                    appendLineToFile(validCoverageFile, branchesCovered);
+                }
             }
 
             if (result == Result.SUCCESS || (result == Result.INVALID && !SAVE_ONLY_VALID)) {
@@ -746,9 +763,10 @@ public class ZestGuidance implements Guidance {
 
                     // libFuzzerCompat stats are only displayed when they hit new coverage
                     if (LIBFUZZER_COMPAT_OUTPUT) {
-                        displayStats(false);
+                        displayStats();
                     }
 
+                    /*
                     infoLog("Saving new input (at run %d): " +
                                     "input #%d " +
                                     "of size %d; " +
@@ -758,14 +776,19 @@ public class ZestGuidance implements Guidance {
                             currentInput.size(),
                             why);
 
+                     */
+
                     // Save input to queue and to disk
                     final String reason = why;
                     GuidanceException.wrap(() -> saveCurrentInput(responsibilities, reason));
 
                     // Update coverage information
-                    updateCoverageFile();
+                    //updateCoverageFile();
                 }
             } else if (result == Result.FAILURE || result == Result.TIMEOUT) {
+                Date now = new Date();
+                long elapsedMilliseconds = now.getTime() - startTime.getTime();
+
                 String msg = error.getMessage();
 
                 // Get the root cause of the failure
@@ -788,10 +811,30 @@ public class ZestGuidance implements Guidance {
                     String saveFileName = String.format("id_%06d", crashIdx);
                     File saveFile = new File(savedFailuresDirectory, saveFileName);
                     GuidanceException.wrap(() -> writeCurrentInputToFile(saveFile));
-                    infoLog("%s", "Found crash: " + error.getClass() + " - " + (msg != null ? msg : ""));
+                    infoLog("%d %s %s", elapsedMilliseconds, saveFileName, "Found crash: " + error.getClass() + " - " + (msg != null ? msg : ""));
                     String how = currentInput.desc;
                     String why = result == Result.FAILURE ? "+crash" : "+hang";
-                    infoLog("Saved - %s %s %s", saveFile.getPath(), how, why);
+                    //infoLog("Saved - %s %s %s", saveFile.getPath(), how, why);
+
+                    // Save stack trace to disk
+                    File stackTraceFile = new File(failureStatsDirectory, saveFileName + ".stacktrace");
+                    appendLineToFile(stackTraceFile, error.getClass().toString());
+                    for (StackTraceElement s: Arrays.asList(rootCause.getStackTrace())) {
+                        appendLineToFile(stackTraceFile, s.toString());
+                    }
+
+                    String branchesCovered = runCoverage.getCovered().stream()
+                            .map(String::valueOf)
+                            .collect(Collectors.joining(","));
+
+                    // Save crash stats to disk
+                    File statsFile = new File(failureStatsDirectory, saveFileName + ".stats");
+                    appendLineToFile(statsFile, "Type: " + error.getClass());
+                    appendLineToFile(statsFile, "TTD: " + elapsedMilliseconds);
+                    //appendLineToFile(statsFile, "ChoiceCounts: " + choiceCounts);
+                    appendLineToFile(statsFile, "Branches: " + branchesCovered);
+                    appendLineToFile(statsFile, "HashCode: " + runCoverage.hashCode());
+                    appendLineToFile(statsFile, "NonZeroHashCode: " + runCoverage.nonZeroHashCode());
 
                     if (EXACT_CRASH_PATH != null && !EXACT_CRASH_PATH.equals("")) {
                         File exactCrashFile = new File(EXACT_CRASH_PATH);
@@ -800,14 +843,14 @@ public class ZestGuidance implements Guidance {
 
                     // libFuzzerCompat stats are only displayed when they hit new coverage or crashes
                     if (LIBFUZZER_COMPAT_OUTPUT) {
-                        displayStats(false);
+                        displayStats();
                     }
                 }
             }
 
             // displaying stats on every interval is only enabled for AFL-like stats screen
             if (!LIBFUZZER_COMPAT_OUTPUT) {
-                displayStats(false);
+                displayStats();
             }
 
             // Save input unconditionally if such a setting is enabled
@@ -830,6 +873,7 @@ public class ZestGuidance implements Guidance {
         boolean coverageBitsUpdated = totalCoverage.updateBits(runCoverage);
         if (result == Result.SUCCESS) {
             validCoverage.updateBits(runCoverage);
+            uniqueBranchSets.add(runCoverage.nonZeroHashCode());
         }
 
         // Coverage after
@@ -940,7 +984,7 @@ public class ZestGuidance implements Guidance {
         String how = currentInput.desc;
         File saveFile = new File(savedCorpusDirectory, saveFileName);
         writeCurrentInputToFile(saveFile);
-        infoLog("Saved - %s %s %s", saveFile.getPath(), how, why);
+        //infoLog("Saved - %s %s %s", saveFile.getPath(), how, why);
 
         // If not using guidance, do nothing else
         if (blind) {
@@ -1216,9 +1260,15 @@ public class ZestGuidance implements Guidance {
             values.trimToSize();
 
             // Inputs should not be empty, otherwise mutations don't work
-            if (values.isEmpty()) {
-                throw new IllegalArgumentException("Input is either empty or nothing was requested from the input generator.");
-            }
+            //if (values.isEmpty()) {
+            //    throw new IllegalArgumentException("Input is either empty or nothing was requested from the input generator.");
+            //}
+        }
+
+        @Override
+        public int hashCode() {
+            gc();
+            return values.hashCode();
         }
 
         @Override

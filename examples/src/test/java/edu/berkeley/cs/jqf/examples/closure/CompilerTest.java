@@ -43,6 +43,7 @@ import com.google.javascript.jscomp.SourceFile;
 import com.pholser.junit.quickcheck.From;
 import edu.berkeley.cs.jqf.examples.common.AsciiStringGenerator;
 import edu.berkeley.cs.jqf.examples.js.JavaScriptCodeGenerator;
+import edu.berkeley.cs.jqf.examples.js.SplitJSCodeGenerator;
 import edu.berkeley.cs.jqf.fuzz.Fuzz;
 import edu.berkeley.cs.jqf.fuzz.JQF;
 import org.apache.commons.io.IOUtils;
@@ -98,8 +99,10 @@ public class CompilerTest {
 
     @Fuzz
     public void testWithInputStream(InputStream in) throws IOException {
-        SourceFile input = SourceFile.fromInputStream("input", in, StandardCharsets.UTF_8);
-        doCompile(input);
+        String code = IOUtils.toString(in, StandardCharsets.UTF_8);
+        //SourceFile input = SourceFile.fromInputStream("input", in, StandardCharsets.UTF_8);
+        //doCompile(input);
+        testWithString(code);
     }
 
     @Fuzz
@@ -110,6 +113,11 @@ public class CompilerTest {
 
     @Fuzz
     public void testWithGenerator(@From(JavaScriptCodeGenerator.class) String code) {
+        testWithString(code);
+    }
+
+    @Fuzz
+    public void testWithSplitGenerator(@From(SplitJSCodeGenerator.class) String code) {
         testWithString(code);
     }
 

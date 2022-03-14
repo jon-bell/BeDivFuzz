@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2017-2018 The Regents of the University of California
- * Copyright (c) 2021 Rohan Padhye
  *
  * All rights reserved.
  *
@@ -86,8 +85,6 @@ public class ReproGuidance implements Guidance {
 
     HashMap<Integer, String> branchDescCache = new HashMap<>();
 
-    private boolean stopOnFailure = false;
-    private boolean observedFailure = false;
 
     /**
      * Constructs an instance of ReproGuidance with a list of
@@ -131,16 +128,6 @@ public class ReproGuidance implements Guidance {
     }
 
     /**
-     * Configure whether the repro execution should stop as soon as
-     * the first failure is encountered.
-     *
-     * @param value whether to stop the repro on failure
-     */
-    public void setStopOnFailure(boolean value) {
-        this.stopOnFailure = value;
-    }
-
-    /**
      * Returns an input stream corresponding to the next input file.
      *
      * @return an input stream corresponding to the next input file
@@ -167,7 +154,7 @@ public class ReproGuidance implements Guidance {
      */
     @Override
     public boolean hasInput() {
-        return nextFileIdx < inputFiles.length && !(stopOnFailure && observedFailure);
+        return nextFileIdx < inputFiles.length;
     }
 
     @Override
@@ -233,7 +220,6 @@ public class ReproGuidance implements Guidance {
         // Print result
         File inputFile = getCurrentInputFile();
         if (result == Result.FAILURE) {
-            observedFailure = true;
             System.out.printf("%s ::= %s (%s)\n", inputFile.getName(), result, error.getClass().getName());
         } else {
             System.out.printf("%s ::= %s\n", inputFile.getName(), result);

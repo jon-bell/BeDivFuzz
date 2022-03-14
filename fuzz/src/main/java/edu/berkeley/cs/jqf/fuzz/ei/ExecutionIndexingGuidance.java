@@ -111,8 +111,7 @@ public class ExecutionIndexingGuidance extends ZestGuidance {
     protected final double DEMAND_DRIVEN_SPLICING_PROBABILITY = 0.0;
 
     /**
-     * Constructs a new EI guidance instance with optional duration,
-     * optional trial limit, and possibly deterministic PRNG.
+     * Constructs a new guidance instance.
      *
      * @param testName the name of test to display on the status screen
      * @param duration the amount of time to run fuzzing for, where
@@ -121,15 +120,20 @@ public class ExecutionIndexingGuidance extends ZestGuidance {
      *                 {@code null} indicates unlimited trials.
      * @param outputDirectory the directory where fuzzing results will be written
      * @param sourceOfRandomness      a pseudo-random number generator
+     * @param seedInputFiles one or more input files to be used as initial inputs
      * @throws IOException if the output directory could not be prepared
      */
-    public ExecutionIndexingGuidance(String testName, Duration duration, Long trials, File outputDirectory, Random sourceOfRandomness) throws IOException {
+    public ExecutionIndexingGuidance(String testName, Duration duration, Long trials, File outputDirectory, Random sourceOfRandomness, File... seedInputFiles) throws IOException {
         super(testName, duration, trials, outputDirectory, sourceOfRandomness);
+        if (seedInputFiles != null) {
+            for (File seedInputFile : seedInputFiles) {
+                seedInputs.add(new MappedSeedInput(seedInputFile));
+            }
+        }
     }
 
     /**
-     * Constructs a new EI guidance instance with seed input directory and optional
-     * duration, optional trial limit, an possibly deterministic PRNG.
+     * Creates a new guidance instance.
      *
      * @param testName the name of test to display on the status screen
      * @param duration the amount of time to run fuzzing for, where
@@ -142,24 +146,10 @@ public class ExecutionIndexingGuidance extends ZestGuidance {
      * @throws IOException if the output directory could not be prepared
      */
     public ExecutionIndexingGuidance(String testName, Duration duration, Long trials, File outputDirectory, File seedInputDir, Random sourceOfRandomness) throws IOException {
-        super(testName, duration, trials, outputDirectory, seedInputDir, sourceOfRandomness);
+        this(testName, duration, trials, outputDirectory, sourceOfRandomness, IOUtils.resolveInputFileOrDirectory(seedInputDir));
     }
 
-    /**
-     * Creates a new EI guidance instance with seed input files and
-     * optional duration.
-     *
-     * @param testName the name of test to display on the status screen
-     * @param duration the amount of time to run fuzzing for, where
-     *                 {@code null} indicates unlimited time.
-     * @param outputDirectory the directory where fuzzing results will be written
-     * @throws IOException if the output directory could not be prepared
-     */
-    public ExecutionIndexingGuidance(String testName, Duration duration, File outputDirectory, File[] seedFiles) throws IOException {
-        super(testName, duration, outputDirectory, seedFiles);
-    }
-
-    /** Returns the banner to be displayed on the status screen */
+        /** Returns the banner to be displayed on the status screen */
     protected String getTitle() {
         if (blind) {
             return super.getTitle();

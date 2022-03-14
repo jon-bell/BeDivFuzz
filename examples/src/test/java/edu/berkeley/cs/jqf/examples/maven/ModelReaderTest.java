@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import com.pholser.junit.quickcheck.From;
+import edu.berkeley.cs.jqf.examples.xml.SplitXmlDocumentGenerator;
 import edu.berkeley.cs.jqf.examples.xml.XMLDocumentUtils;
 import edu.berkeley.cs.jqf.examples.xml.XmlDocumentGenerator;
 import edu.berkeley.cs.jqf.examples.common.Dictionary;
@@ -64,6 +65,12 @@ public class ModelReaderTest {
     @Fuzz
     public void testWithGenerator(@From(XmlDocumentGenerator.class)
                                       @Dictionary("dictionaries/maven-model.dict") Document dom) {
+        testWithInputStream(XMLDocumentUtils.documentToInputStream(dom));
+    }
+
+    @Fuzz
+    public void testWithSplitGenerator(@From(SplitXmlDocumentGenerator.class)
+                                  @Dictionary("dictionaries/maven-model.dict") Document dom) {
         testWithInputStream(XMLDocumentUtils.documentToInputStream(dom));
     }
 

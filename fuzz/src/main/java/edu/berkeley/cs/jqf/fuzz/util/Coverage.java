@@ -49,7 +49,7 @@ public class Coverage implements TraceEventVisitor {
     private final int COVERAGE_MAP_SIZE = (1 << 16) - 1; // Minus one to reduce collisions
 
     /** The coverage counts for each edge. */
-    private final Counter counter = new NonZeroCachingCounter(COVERAGE_MAP_SIZE);
+    protected final Counter counter = new NonZeroCachingCounter(COVERAGE_MAP_SIZE);
 
     /** Creates a new coverage map. */
     public Coverage() {
@@ -216,17 +216,6 @@ public class Coverage implements TraceEventVisitor {
      */
     @Override
     public String toString() {
-        StringBuffer sb = new StringBuffer();
-        sb.append("Coverage counts: \n");
-        for (int i = 0; i < counter.counts.length; i++) {
-            if (counter.counts[i] == 0) {
-                continue;
-            }
-            sb.append(i);
-            sb.append("->");
-            sb.append(counter.counts[i]);
-            sb.append('\n');
-        }
-        return sb.toString();
+        return "counter: " + counter.toString();
     }
 }
