@@ -1,0 +1,14 @@
+name: Smoke test evaluation - 10 minutes, 5 trials
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  evaluate:
+    uses: jon-bell/BeDivFuzz/.github/workflows/evaluation-workflow.yml@eval-ci
+    with:
+      duration: 10m
+      trials: 5
+      fuzzer_to_invoke: ./bin/jqf-bediv
+      java_home: /usr/lib/jvm/jdk1.8.0_301/
+      report_on_branches: eval-ci, main
+      PROFILE_HEAP: false
+    secrets:
+      INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}

@@ -1,0 +1,280 @@
+name: Execute and report a JQF performance evaluation campaign
+on:
+  workflow_call:
+    inputs:
+      trials:
+        description: Number of trials to conduct of each fuzzing target
+        required: false
+        default: 5
+        type: number
+      duration:
+        description: Duration of each fuzzing campaign, e.g. 5m, 24h
+        required: false
+        default: 5m
+        type: string
+      report_on_branches:
+        description: Other branches to include in the report
+        required: false
+        default: fast-collision-free-coverage,reporting-ci
+        type: string
+      fuzzer_to_invoke:
+        description: Path to script to invoke for fuzzing run, defaults to ./bin/jqf-zest
+        required: false
+        default: ./bin/jqf-zest
+        type: string
+      java_home:
+        required: false
+        default: /usr/lib/jvm/java-11-openjdk-amd64/
+        type: string
+      runs_on:
+        required: false
+        default: self-hosted
+        type: string
+      PROFILE_HEAP:
+        required: false
+        type: boolean
+      INFLUX_URL:
+        required: false
+        type: string
+        default: https://dashboard-influx.apps.in.ripley.cloud
+      INFLUX_BUCKET:
+        required: false
+        type: string
+        default: java-fuzzing-dev
+      INFLUX_ORGANIZATION:
+        required: false
+        type: string
+        default: ripley.cloud
+      JVM_OPTS:
+        required: false
+        type: string
+    secrets:
+      INFLUX_TOKEN:
+        required: false
+        description: InflxuDB access token
+jobs:
+  build-matrix:
+    runs-on: self-hosted
+    outputs:
+      matrix-run: ${{ steps.set-matrix.outputs.matrix-run }}
+      matrix-analyze: ${{ steps.set-matrix.outputs.matrix-analyze }}
+      base-url: ${{ steps.set-matrix.outputs.base-url }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set matrix for evaluation
+        id: set-matrix
+        run: |
+          echo "::set-output name=matrix-run::$( python3 scripts/experiments/generate-experiment-matrix.py ${{ inputs.trials }} )"
+          echo "::set-output name=matrix-analyze::$( python3 scripts/experiments/generate-experiment-matrix.py )"
+          echo "::set-output name=base-url::https://ci.in.ripley.cloud/logs/public/${{ github.repository }}/${{ github.sha }}/$(./scripts/experiments/urlencode.sh "${{ github.workflow }}")/${{ github.run_id }}/${{ github.run_attempt }}/site/"
+  run-fuzzer:
+    runs-on: ${{ inputs.runs_on }}
+    timeout-minutes: 1560
+    needs: build-matrix
+    env:
+      JAVA_HOME: ${{ inputs.java_home }}
+      RESULTS_DIR: /ci-logs/public/${{ github.repository }}/${{ github.sha }}/${{ github.workflow }}/${{ github.run_id }}/${{ github.run_attempt }}/artifacts
+      JVM_OPTS: -Dtime=${{ inputs.duration }} -Djqf.ei.QUIET_MODE=true -DZEST_STATS_REFRESH_TIME_PERIOD=60000 -DuseFastNonCollidingCoverageInstrumentation=true -Djqf.ei.MAX_FAILURES_REPORT=10 ${{ inputs.JVM_OPTS }}
+      PROFILE_HEAP: ${{ inputs.PROFILE_HEAP }}
+    strategy:
+        matrix: ${{fromJson(needs.build-matrix.outputs.matrix-run)}}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Telegraf config
+        uses: DamianReeves/write-file-action@v1.0
+        with:
+          path: telegraf.conf
+          write-mode: preserve
+          contents: |
+            [global_tags]
+              experiment = "$EXPERIMENT"
+              benchmark = "$BENCHMARK"
+              fuzzer = "$FUZZER_NAME"
+              trial = "$TRIAL"
+            [agent]
+              interval = "10s"
+              round_interval = true
+              metric_batch_size = 1000
+              metric_buffer_limit = 10000
+              collection_jitter = "0s"
+              flush_interval = "10s"
+              flush_jitter = "0s"
+              precision = ""
+              hostname = ""
+              omit_hostname = false
+            [[outputs.influxdb_v2]]
+              urls = ["$INFLUX_URL"]
+              token = "$INFLUX_TOKEN"
+              organization = "$INFLUX_ORGANIZATION"
+              bucket = "$INFLUX_BUCKET"
+             [[processors.defaults]]
+                 [processors.defaults.fields]
+                    hostname = "$RUNNER_NAME"
+            [[inputs.cpu]]
+              percpu = true
+              totalcpu = true
+              collect_cpu_time = false
+              report_active = false
+            [[inputs.mem]]
+            [[inputs.tail]]
+              name_override = "jqf"
+              path_tag = ""
+              files = ["fuzz-results/plot_data"]
+              data_format = "csv"
+              csv_timestamp_column = "# unix_time"
+              csv_timestamp_format = "unix"
+              csv_header_row_count = 1
+              csv_trim_space = true
+              from_beginning = true
+            [[inputs.tail]]
+              name_override = "knarr-memory"
+              files = ["fuzz-results/knarr-memory.csv"]
+              data_format = "csv"
+              csv_timestamp_column = "# unix_time"
+              csv_timestamp_format = "unix_ms"
+              csv_header_row_count = 1
+              csv_trim_space = true
+              from_beginning = true
+              path_tag = ""
+            [[inputs.tail]]
+              name_override = "confetti-central-memory"
+              files = ["fuzz-results/confetti-central-memory.csv"]
+              data_format = "csv"
+              path_tag = ""
+              csv_timestamp_column = "# unix_time"
+              csv_timestamp_format = "unix_ms"
+              csv_header_row_count = 1
+              csv_trim_space = true
+              from_beginning = true
+      - name: Start Telegraf
+        env:
+          EXPERIMENT: ${{ github.workflow }}
+          FUZZER_NAME: ${{ inputs.fuzzer_to_invoke }}
+          BENCHMARK: ${{ matrix.config.id }}
+          TRIAL: ${{ matrix.config.runNumber }}
+          INFLUX_URL: ${{ inputs.INFLUX_URL }}
+          INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
+          INFLUX_ORGANIZATION: ${{ inputs.INFLUX_ORGANIZATION }}
+          INFLUX_BUCKET: ${{ inputs.INFLUX_BUCKET }}
+        run: |
+          if [ ! -z "$INFLUX_TOKEN" ]
+          then
+            telegraf --config telegraf.conf --pidfile telegraf.pid &
+          fi
+      - name: Build JQF
+        run: mvn -B -DskipTests install
+      - name: Run Fuzzer
+        run: timeout 25h bash -c "${{ inputs.fuzzer_to_invoke }} -c $(scripts/examples_classpath.sh) ${{ matrix.config.class }} ${{ matrix.config.method }} fuzz-results"
+      - name: Stop Telegraf
+        run: |
+          if [ ! -z "$INFLUX_TOKEN" ]
+          then
+            kill $(cat telegraf.pid) || true
+          fi
+      - name: Collect Results
+        run: |
+          mkdir -p fuzz-logs
+          if [ -f "fuzz-results/fuzz.log" ]; then
+            mv fuzz-results/fuzz.log fuzz-logs
+          fi
+
+          mv fuzz-logs ${{ matrix.config.id }}_${{ matrix.config.runNumber }}_fuzz_logs
+
+          mv fuzz-results/corpus ${{ matrix.config.id }}_corpus_${{ matrix.config.runNumber }}
+          tar czf ${{ matrix.config.id }}_corpus_${{ matrix.config.runNumber }}.tgz ${{ matrix.config.id }}_corpus_${{ matrix.config.runNumber }}
+          mv fuzz-results/failures ${{ matrix.config.id }}_failures_${{ matrix.config.runNumber }}
+          tar czf ${{ matrix.config.id }}_failures_${{ matrix.config.runNumber }}.tgz ${{ matrix.config.id }}_failures_${{ matrix.config.runNumber }}
+          mv fuzz-results/plot_data ${{ matrix.config.id }}_plot_data_${{ matrix.config.runNumber }}
+
+          mkdir -p "$RESULTS_DIR"
+          cp ${{ matrix.config.id }}_corpus_${{ matrix.config.runNumber }}.tgz "$RESULTS_DIR/"
+          cp ${{ matrix.config.id }}_failures_${{ matrix.config.runNumber }}.tgz "$RESULTS_DIR/"
+          cp ${{ matrix.config.id }}_plot_data_${{ matrix.config.runNumber }} "$RESULTS_DIR/"
+          cp -r ${{ matrix.config.id }}_${{ matrix.config.runNumber }}_fuzz_logs "$RESULTS_DIR/"
+
+          # Also save any debug log files locally
+          find fuzz-results -maxdepth 1 -type f \( -iname \*.csv -o -iname \*.log \) -exec sh -c 'cp {} "$RESULTS_DIR/${{ matrix.config.id }}_$(basename {})_${{ matrix.config.runNumber }}"' \;
+
+      - name: Archive Fuzz Logs
+        uses: actions/upload-artifact@v2
+        with:
+          path: ${{ matrix.config.id }}_${{ matrix.config.runNumber }}_fuzz_logs
+          name: ${{ matrix.config.id }}_${{ matrix.config.runNumber }}_fuzz_logs
+      - name: Archive Corpus
+        uses: actions/upload-artifact@v2
+        with:
+          path: ${{ matrix.config.id }}_corpus_${{ matrix.config.runNumber }}.tgz
+          name: archive_${{ matrix.config.id }}_corpus_${{ matrix.config.runNumber }}.tgz
+      - name: Archive Failures
+        uses: actions/upload-artifact@v2
+        with:
+         path: ${{ matrix.config.id }}_failures_${{ matrix.config.runNumber }}.tgz
+         name: archive_${{ matrix.config.id }}_failures_${{ matrix.config.runNumber }}.tgz
+      - name: Archive Plot Data
+        uses: actions/upload-artifact@v2
+        with:
+         path: ${{ matrix.config.id }}_plot_data_${{ matrix.config.runNumber }}
+         name: ${{ matrix.config.id }}_plot_data_${{ matrix.config.runNumber }}
+  repro-jacoco:
+    runs-on: self-hosted
+    needs: [run-fuzzer, build-matrix]
+    env:
+      RESULTS_DIR: /ci-logs/public/${{ github.repository }}/${{ github.sha }}/${{ github.workflow }}/${{ github.run_id }}/${{ github.run_attempt }}
+      TARGETS: ${{ needs.build-matrix.outputs.matrix-analyze }}
+      BASE_URL: ${{ needs.build-matrix.outputs.base-url }}
+      TRIALS: ${{ inputs.trials }}
+      DURATION: ${{ inputs.duration }}
+      JAVA_HOME: ${{ inputs.java_home }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/download-artifact@v2
+      - id: repro
+        name: Repro
+        run: |
+          mvn -B -q -DskipTests install
+          pwd
+          JACOCO_SUMMARY='{'
+          for k in $(jq '.config | keys | .[]' <<< "$TARGETS"); do
+            value=$(jq -c -r ".config[$k]" <<< $TARGETS)
+            method=$(jq -r ".method" <<< $value)
+            class=$(jq -r ".class" <<< $value)
+            id=$(jq -r ".id" <<< $value)
+            coveragePackages=$(jq -r ".coveragePackages" <<< $value)
+            echo $id
+            echo $coveragePackages
+            find . -maxdepth 2 -type f -name "${id}_corpus_*" -exec mv {} . \;
+            find . -maxdepth 1 -type f -name "${id}_corpus_*.tgz" -exec tar xzf {} \;
+            find . -maxdepth 1 -name "*${id}_*.tgz" -exec rm -rf {} \;
+            rm -f jacoco.exec
+
+            bash scripts/experiments/reproWithJacoco.sh $class $method jacoco.exec "$coveragePackages" "${id}_corpus_*"
+            bash scripts/experiments/get_coverage.sh jacoco.exec "$coveragePackages" jacoco-$id
+            JACOCO_SUMMARY+="\"${id}\": $(cat jacoco_summary.json),"
+            mv jacoco_summary.json "$RESULTS_DIR/artifacts/${id}_jacoco_summary.json"
+            cp -r jacoco-$id "$RESULTS_DIR/"
+          done
+          JACOCO_SUMMARY+='"site_url":"$BASE_URL"}'
+          echo "::set-output name=jacoco-summary::$JACOCO_SUMMARY"
+          mv "$RESULTS_DIR"/jacoco* "$RESULTS_DIR/artifacts/"
+  build-site:
+    runs-on: self-hosted
+    needs: [ repro-jacoco ]
+    env:
+      RENV_PATHS_ROOT: /ci-logs/renv
+      PROFILE_HEAP: ${{ inputs.PROFILE_HEAP }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: 'jon-bell/fuzzing-build-site-action'
+          ref: 'main'
+      - name: Fetch workflow runs to compare to
+        id: fetch-compare
+        uses: jon-bell/list-workflow-runs-by-branch-action@main
+        with:
+          include_branches: ${{ inputs.report_on_branches}}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build site
+        uses: jon-bell/fuzzing-build-site-action@main
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          comparisons: ${{ steps.fetch-compare.outputs.workflow_runs }}
