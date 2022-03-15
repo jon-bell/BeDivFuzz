@@ -40,8 +40,21 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -53,8 +66,16 @@ import edu.berkeley.cs.jqf.fuzz.guidance.GuidanceException;
 import edu.berkeley.cs.jqf.fuzz.guidance.Result;
 import edu.berkeley.cs.jqf.fuzz.guidance.TimeoutException;
 import edu.berkeley.cs.jqf.fuzz.util.Coverage;
+import edu.berkeley.cs.jqf.fuzz.util.CoverageFactory;
+import edu.berkeley.cs.jqf.fuzz.util.FastNonCollidingCoverage;
+import edu.berkeley.cs.jqf.fuzz.util.ICoverage;
 import edu.berkeley.cs.jqf.fuzz.util.IOUtils;
+import edu.berkeley.cs.jqf.instrument.tracing.FastCoverageSnoop;
 import edu.berkeley.cs.jqf.instrument.tracing.events.TraceEvent;
+import janala.instrument.FastCoverageListener;
+import org.eclipse.collections.api.iterator.IntIterator;
+import org.eclipse.collections.api.list.primitive.IntList;
+import org.eclipse.collections.impl.set.mutable.primitive.IntHashSet;
 
 import static java.lang.Math.ceil;
 import static java.lang.Math.log;
@@ -137,13 +158,13 @@ public class ZestGuidance implements Guidance {
     protected int numSavedInputs = 0;
 
     /** Coverage statistics for a single run. */
-    protected Coverage runCoverage = new Coverage();
+    protected ICoverage runCoverage = CoverageFactory.newInstance();
 
     /** Cumulative coverage statistics. */
-    protected Coverage totalCoverage = new Coverage();
+    protected ICoverage totalCoverage = CoverageFactory.newInstance();
 
     /** Cumulative coverage for valid inputs. */
-    protected Coverage validCoverage = new Coverage();
+    protected ICoverage validCoverage = CoverageFactory.newInstance();
 
     /** Set of hashes of all valid inputs generated so far. */
     protected Set<Integer> uniqueValidInputs = new HashSet<>();
@@ -170,7 +191,7 @@ public class ZestGuidance implements Guidance {
     protected Map<Object, Input> responsibleInputs = new HashMap<>(totalCoverage.size());
 
     /** The set of unique failures found so far. */
-    protected Set<List<StackTraceElement>> uniqueFailures = new HashSet<>();
+    protected Set<String> uniqueFailures = new HashSet<>();
 
     /** save crash to specific location (should be used with EXIT_ON_CRASH) **/
     protected final String EXACT_CRASH_PATH = System.getProperty("jqf.ei.EXACT_CRASH_PATH");
@@ -299,6 +320,10 @@ public class ZestGuidance implements Guidance {
         this.validityFuzzing = !Boolean.getBoolean("jqf.ei.DISABLE_VALIDITY_FUZZING");
         prepareOutputDirectory();
 
+        if(this.runCoverage instanceof FastCoverageListener){
+            FastCoverageSnoop.setFastCoverageListener((FastCoverageListener) this.runCoverage);
+        }
+
         // Try to parse the single-run timeout
         String timeout = System.getProperty("jqf.ei.TIMEOUT");
         if (timeout != null && !timeout.isEmpty()) {
@@ -396,9 +421,8 @@ public class ZestGuidance implements Guidance {
     }
 
     protected String getStatNames() {
-        return "# unix_time, unique_crashes, total_cov, valid_cov, total_inputs, " +
-                "valid_inputs, valid_paths, valid_branch_sets, unique_valid_inputs, " +
-                "b0, b1, b2";
+        return "# unix_time, cycles_done, cur_path, paths_total, pending_total, " +
+            "pending_favs, map_size, unique_crashes, unique_hangs, max_depth, execs_per_sec, valid_inputs, invalid_inputs, valid_cov, all_covered_probes, valid_covered_probes, b0, b1, b2";
     }
 
     /* Writes a line of text to a given log file. */
@@ -481,7 +505,12 @@ public class ZestGuidance implements Guidance {
                 if (this.testName != null) {
                     console.printf("Test name:            %s\n", this.testName);
                 }
-                    
+
+                String instrumentationType = "Janala";
+                if (this.runCoverage instanceof FastNonCollidingCoverage) {
+                    instrumentationType = "Fast";
+                }
+                console.printf("Instrumentation:      %s\n", instrumentationType);
                 console.printf("Results directory:    %s\n", this.outputDirectory.getAbsolutePath());
                 console.printf("Elapsed time:         %s (%s)\n", millisToDuration(elapsedMilliseconds),
                         maxDurationMillis == Long.MAX_VALUE ? "no time limit" : ("max " + millisToDuration(maxDurationMillis)));
@@ -502,17 +531,16 @@ public class ZestGuidance implements Guidance {
             }
         }
 
-        String plotData = String.format("%d, %d, %d, %d, %d, %d, %d, %d, %d, %.3f, %.3f, %.3f",
-                TimeUnit.MILLISECONDS.toSeconds(now.getTime()), uniqueFailures.size(), nonZeroCount, nonZeroValidCount,
-                numTrials, numValid, uniqueValidPaths.size(), uniqueBranchSets.size(), uniqueValidInputs.size(),
-                uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2]
-        );
-
+        String plotData = String.format("%d, %d, %d, %d, %d, %d, %.2f%%, %d, %d, %d, %.2f, %d, %d, %.2f%%, %d, %d, %.3f, %.3f, %.3f",
+                TimeUnit.MILLISECONDS.toSeconds(now.getTime()), cyclesCompleted, currentParentInputIdx,
+                numSavedInputs, 0, 0, nonZeroFraction, uniqueFailures.size(), 0, 0, intervalExecsPerSecDouble,
+                numValid, numTrials-numValid, nonZeroValidFraction, nonZeroCount, nonZeroValidCount,
+                uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2]);
         appendLineToFile(statsFile, plotData);
 
     }
 
-    /** Updates the data in the coverage file */ 
+    /** Updates the data in the coverage file */
     protected void updateCoverageFile() {
         try {
             PrintWriter pw = new PrintWriter(coverageFile);
@@ -523,7 +551,7 @@ public class ZestGuidance implements Guidance {
             throw new GuidanceException(ignore);
         }
     }
-    
+
     /* Returns the banner to be displayed on the status screen */
     protected String getTitle() {
         if (blind) {
@@ -733,9 +761,7 @@ public class ZestGuidance implements Guidance {
 
                 // Add to coverage file
                 if (LOG_ALL_VALID_COVERAGE) {
-                    String branchesCovered = runCoverage.getCovered().stream()
-                            .map(String::valueOf)
-                            .collect(Collectors.joining(","));
+                    String branchesCovered = runCoverage.getCovered().makeString(",");
                     appendLineToFile(validCoverageFile, branchesCovered);
                 }
             }
@@ -746,7 +772,7 @@ public class ZestGuidance implements Guidance {
                 // Newly covered branches are always included.
                 // Existing branches *may* be included, depending on the heuristics used.
                 // A valid input will steal responsibility from invalid inputs
-                Set<Object> responsibilities = computeResponsibilities(valid);
+                IntHashSet responsibilities = computeResponsibilities(valid);
 
                 // Determine if this input should be saved
                 List<String> savingCriteriaSatisfied = checkSavingCriteriaSatisfied(result);
@@ -798,7 +824,7 @@ public class ZestGuidance implements Guidance {
                 }
 
                 // Attempt to add this to the set of unique failures
-                if (uniqueFailures.add(Arrays.asList(rootCause.getStackTrace()))) {
+                if (uniqueFailures.add(failureDigest(rootCause.getStackTrace()))) {
 
                     // Trim input (remove unused keys)
                     currentInput.gc();
@@ -823,9 +849,7 @@ public class ZestGuidance implements Guidance {
                         appendLineToFile(stackTraceFile, s.toString());
                     }
 
-                    String branchesCovered = runCoverage.getCovered().stream()
-                            .map(String::valueOf)
-                            .collect(Collectors.joining(","));
+                    String branchesCovered = runCoverage.getCovered().makeString(",");
 
                     // Save crash stats to disk
                     File statsFile = new File(failureStatsDirectory, saveFileName + ".stats");
@@ -906,18 +930,18 @@ public class ZestGuidance implements Guidance {
 
 
     // Compute a set of branches for which the current input may assume responsibility
-    protected Set<Object> computeResponsibilities(boolean valid) {
-        Set<Object> result = new HashSet<>();
+    protected IntHashSet computeResponsibilities(boolean valid) {
+        IntHashSet result = new IntHashSet();
 
         // This input is responsible for all new coverage
-        Collection<?> newCoverage = runCoverage.computeNewCoverage(totalCoverage);
+        IntList newCoverage = runCoverage.computeNewCoverage(totalCoverage);
         if (newCoverage.size() > 0) {
             result.addAll(newCoverage);
         }
 
         // If valid, this input is responsible for all new valid coverage
         if (valid) {
-            Collection<?> newValidCoverage = runCoverage.computeNewCoverage(validCoverage);
+            IntList newValidCoverage = runCoverage.computeNewCoverage(validCoverage);
             if (newValidCoverage.size() > 0) {
                 result.addAll(newValidCoverage);
             }
@@ -927,12 +951,13 @@ public class ZestGuidance implements Guidance {
         if (STEAL_RESPONSIBILITY) {
             int currentNonZeroCoverage = runCoverage.getNonZeroCount();
             int currentInputSize = currentInput.size();
-            Set<?> covered = new HashSet<>(runCoverage.getCovered());
+            IntHashSet covered = new IntHashSet();
+            covered.addAll(runCoverage.getCovered());
 
             // Search for a candidate to steal responsibility from
             candidate_search:
             for (Input candidate : savedInputs) {
-                Set<?> responsibilities = candidate.responsibilities;
+                IntHashSet responsibilities = candidate.responsibilities;
 
                 // Candidates with no responsibility are not interesting
                 if (responsibilities.isEmpty()) {
@@ -947,7 +972,9 @@ public class ZestGuidance implements Guidance {
                                 currentInputSize < candidate.size())) {
 
                     // Check if we can steal all responsibilities from candidate
-                    for (Object b : responsibilities) {
+                    IntIterator iter = responsibilities.intIterator();
+                    while(iter.hasNext()){
+                        int b = iter.next();
                         if (covered.contains(b) == false) {
                             // Cannot steal if this input does not cover something
                             // that the candidate is responsible for
@@ -976,7 +1003,7 @@ public class ZestGuidance implements Guidance {
     }
 
     /* Saves an interesting input to the queue. */
-    protected void saveCurrentInput(Set<Object> responsibilities, String why) throws IOException {
+    protected void saveCurrentInput(IntHashSet responsibilities, String why) throws IOException {
 
         // First, save to disk (note: we issue IDs to everyone, but only write to disk  if valid)
         int newInputIdx = numSavedInputs++;
@@ -997,14 +1024,16 @@ public class ZestGuidance implements Guidance {
         // Third, store basic book-keeping data
         currentInput.id = newInputIdx;
         currentInput.saveFile = saveFile;
-        currentInput.coverage = new Coverage(runCoverage);
+        currentInput.coverage = runCoverage.copy();
         currentInput.nonZeroCoverage = runCoverage.getNonZeroCount();
         currentInput.offspring = 0;
         savedInputs.get(currentParentInputIdx).offspring += 1;
 
         // Fourth, assume responsibility for branches
         currentInput.responsibilities = responsibilities;
-        for (Object b : responsibilities) {
+        IntIterator iter = responsibilities.intIterator();
+        while(iter.hasNext()){
+            int b = iter.next();
             // If there is an old input that is responsible,
             // subsume it
             Input oldResponsible = responsibleInputs.get(b);
@@ -1033,12 +1062,15 @@ public class ZestGuidance implements Guidance {
     /**
      * Handles a trace event generated during test execution.
      *
+     * Not used by FastNonCollidingCoverage, which does not allocate an
+     * instance of TraceEvent at each branch probe execution.
+     *
      * @param e the trace event to be handled
      */
     protected void handleEvent(TraceEvent e) {
         conditionallySynchronize(multiThreaded, () -> {
             // Collect totalCoverage
-            runCoverage.handleEvent(e);
+            ((Coverage) runCoverage).handleEvent(e);
             // Check for possible timeouts every so often
             if (this.singleRunTimeoutMillis > 0 &&
                     this.runStart != null && (++this.branchCount) % 10_000 == 0) {
@@ -1054,7 +1086,7 @@ public class ZestGuidance implements Guidance {
      * Returns a reference to the coverage statistics.
      * @return a reference to the coverage statistics
      */
-    public Coverage getTotalCoverage() {
+    public ICoverage getTotalCoverage() {
         return totalCoverage;
     }
 
@@ -1071,6 +1103,25 @@ public class ZestGuidance implements Guidance {
         } else {
             task.run();
         }
+    }
+
+    private static MessageDigest sha1;
+
+    private static String failureDigest(StackTraceElement[] stackTrace) {
+        if (sha1 == null) {
+            try {
+                sha1 = MessageDigest.getInstance("SHA-1");
+            } catch (NoSuchAlgorithmException e) {
+                throw new GuidanceException(e);
+            }
+        }
+        byte[] bytes = sha1.digest(Arrays.deepToString(stackTrace).getBytes());
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < bytes.length; i++) {
+            sb.append(Integer.toString((bytes[i] & 0xff) + 0x100, 16)
+                    .substring(1));
+        }
+        return sb.toString();
     }
 
     /**
@@ -1105,7 +1156,7 @@ public class ZestGuidance implements Guidance {
          *
          * <p>This field is null for inputs that are not saved.</p>
          */
-        Coverage coverage = null;
+        ICoverage coverage = null;
 
         /**
          * The number of non-zero elements in `coverage`.
@@ -1137,7 +1188,7 @@ public class ZestGuidance implements Guidance {
          * in at least some responsibility set. Hence, this list
          * needs to be kept in-sync with {@link #responsibleInputs}.</p>
          */
-        Set<Object> responsibilities = null;
+        IntHashSet responsibilities = null;
 
         /**
          * Create an empty input.

@@ -4,8 +4,12 @@ import edu.berkeley.cs.jqf.fuzz.ei.ZestGuidance;
 import edu.berkeley.cs.jqf.fuzz.guidance.GuidanceException;
 import edu.berkeley.cs.jqf.fuzz.guidance.Result;
 import edu.berkeley.cs.jqf.fuzz.util.Coverage;
+import org.eclipse.collections.api.iterator.IntIterator;
+import org.eclipse.collections.impl.set.mutable.primitive.IntHashSet;
 
 import java.io.*;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -335,6 +339,25 @@ public class BeDivGuidance extends ZestGuidance{
         return currentInput;
     }
 
+    private static MessageDigest sha1;
+
+    private static String failureDigest(StackTraceElement[] stackTrace) {
+        if (sha1 == null) {
+            try {
+                sha1 = MessageDigest.getInstance("SHA-1");
+            } catch (NoSuchAlgorithmException e) {
+                throw new GuidanceException(e);
+            }
+        }
+        byte[] bytes = sha1.digest(Arrays.deepToString(stackTrace).getBytes());
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < bytes.length; i++) {
+            sb.append(Integer.toString((bytes[i] & 0xff) + 0x100, 16)
+                    .substring(1));
+        }
+        return sb.toString();
+    }
+
     /**
      * Handles the result of a test execution.
      *
@@ -363,9 +386,7 @@ public class BeDivGuidance extends ZestGuidance{
 
                 // Add to coverage file
                 if (LOG_ALL_VALID_COVERAGE) {
-                    String branchesCovered = runCoverage.getCovered().stream()
-                            .map(String::valueOf)
-                            .collect(Collectors.joining(","));
+                    String branchesCovered = runCoverage.getCovered().makeString(",");
                     appendLineToFile(validCoverageFile, branchesCovered);
                 }
             }
@@ -376,7 +397,8 @@ public class BeDivGuidance extends ZestGuidance{
                 // Newly covered branches are always included.
                 // Existing branches *may* be included, depending on the heuristics used.
                 // A valid input will steal responsibility from invalid inputs
-                Set<Object> responsibilities = computeResponsibilities(valid);
+                IntHashSet responsibilities = computeResponsibilities(valid);
+
 
                 // Determine if this input should be saved
                 List<String> savingCriteriaSatisfied = checkSavingCriteriaSatisfied(result);
@@ -440,7 +462,7 @@ public class BeDivGuidance extends ZestGuidance{
                 }
 
                 // Attempt to add this to the set of unique failures
-                if (uniqueFailures.add(Arrays.asList(rootCause.getStackTrace()))) {
+                if (uniqueFailures.add(failureDigest(rootCause.getStackTrace()))) {
 
                     // Trim input (remove unused keys)
                     currentInput.gc();
@@ -475,9 +497,7 @@ public class BeDivGuidance extends ZestGuidance{
 
                         //String choiceCounts = Arrays.toString(lastGeneratedChoiceCounts);
 
-                        String branchesCovered = runCoverage.getCovered().stream()
-                                .map(String::valueOf)
-                                .collect(Collectors.joining(","));
+                        String branchesCovered = runCoverage.getCovered().makeString(",");
 
                         File statsFile = new File(failureStatsDirectory, primarySaveFileName + ".stats");
                         appendLineToFile(statsFile, "Type: " + error.getClass());
@@ -626,7 +646,7 @@ public class BeDivGuidance extends ZestGuidance{
     }
 
     @Override
-    protected void saveCurrentInput(Set<Object> responsibilities, String why) throws IOException {
+    protected void saveCurrentInput(IntHashSet responsibilities, String why) throws IOException {
 
         // First, save to disk (note: we issue IDs to everyone, but only write to disk  if valid)
         int newInputIdx = numSavedInputs++;
@@ -654,14 +674,16 @@ public class BeDivGuidance extends ZestGuidance{
         currentInput.id = newInputIdx;
         currentInput.primarySaveFile = primarySaveFile;
         currentInput.secondarySaveFile = secondarySaveFile;
-        currentInput.coverage = new Coverage(runCoverage);
+        currentInput.coverage = runCoverage.copy();
         currentInput.nonZeroCoverage = runCoverage.getNonZeroCount();
         currentInput.offspring = 0;
         savedInputs.get(currentParentInputIdx).offspring += 1;
 
         // Fourth, assume responsibility for branches
         currentInput.responsibilities = responsibilities;
-        for (Object b : responsibilities) {
+        IntIterator iter = responsibilities.intIterator();
+        while(iter.hasNext()){
+            int b = iter.next();
             // If there is an old input that is responsible,
             // subsume it
             SplitInput oldResponsible = responsibleInputs.get(b);

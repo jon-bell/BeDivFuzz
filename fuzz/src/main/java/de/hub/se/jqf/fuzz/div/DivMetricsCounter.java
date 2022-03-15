@@ -2,10 +2,14 @@ package de.hub.se.jqf.fuzz.div;
 
 import edu.berkeley.cs.jqf.fuzz.util.Counter;
 import edu.berkeley.cs.jqf.fuzz.util.Coverage;
+import edu.berkeley.cs.jqf.fuzz.util.ICoverage;
 import edu.berkeley.cs.jqf.fuzz.util.NonZeroCachingCounter;
 
 import java.util.*;
 import java.util.stream.Collectors;
+
+import org.eclipse.collections.api.iterator.IntIterator;
+import org.eclipse.collections.api.list.primitive.IntList;
 
 public class DivMetricsCounter {
     /** The last time since the metrics have been computed (to reduce overhead). */
@@ -37,23 +41,16 @@ public class DivMetricsCounter {
         cachedMetrics = new double[]{0, 0, 0};
     }
 
-    public void incrementBranchCounts(Coverage runCoverage) {
+    public void incrementBranchCounts(ICoverage runCoverage) {
         // First fix the covered branches
-        Set<Integer> covered = new HashSet<>(runCoverage.getCovered());
-        for (Integer idx : covered) {
+        IntList coveredProbes = runCoverage.getCovered();
+        IntIterator iter = coveredProbes.intIterator();
+        while(iter.hasNext()){
+            int idx = iter.next();
             counter.increment(idx);
             totalBranchHitCount++;
         }
         numExecutions += 1;
-    }
-
-    /**
-     * Returns a list of branch-hit counts, sorted decreasingly (rank-abundance-curve).
-     * @return
-     */
-    public List<Integer> getSortedCounts(){
-        List<Integer> covered = new ArrayList<>(counter.getNonZeroIndices());
-        return covered.stream().sorted(Comparator.reverseOrder()).collect(Collectors.toList());
     }
 
     public double[] getCachedMetrics(Date now) {
@@ -67,13 +64,14 @@ public class DivMetricsCounter {
     }
 
     public void updateMetrics() {
-        HashSet<Integer> coveredBranches = new HashSet<>(counter.getNonZeroIndices());
+        IntList nonZeroCoverageValues = counter.getNonZeroValues();
         double shannon = 0;
         double h_0 = 0;
         double h_2 = 0;
 
-        for (Integer idx : coveredBranches) {
-            int hit_count = counter.getAtIndex(idx);
+        IntIterator iter = nonZeroCoverageValues.intIterator();
+        while(iter.hasNext()){
+            int hit_count = iter.next();
 
             double  p_i = ((double) hit_count) / totalBranchHitCount;
             shannon += p_i * Math.log(p_i);
@@ -90,9 +88,11 @@ public class DivMetricsCounter {
 
     public double shannonIndex() {
         double sum = 0;
-        HashSet<Integer> coveredBranches = new HashSet<>(counter.getNonZeroIndices());
-        for (Integer idx : coveredBranches) {
-            double  p_i = ((double)counter.getAtIndex(idx)) / totalBranchHitCount;
+        IntList nonZeroCoverageValues = counter.getNonZeroValues(); 
+        IntIterator iter = nonZeroCoverageValues.intIterator();
+        while(iter.hasNext()){
+            int hit_count = iter.next();
+            double  p_i = ((double) hit_count) / totalBranchHitCount;
             sum += p_i * Math.log(p_i);
         }
         return - sum;
@@ -103,9 +103,11 @@ public class DivMetricsCounter {
             return Math.exp(shannonIndex());
         }
         double sum = 0;
-        HashSet<Integer> coveredBranches = new HashSet<>(counter.getNonZeroIndices());
-        for (Integer idx : coveredBranches) {
-            double  p_i = ((double)counter.getAtIndex(idx))/totalBranchHitCount;
+        IntList nonZeroCoverageValues = counter.getNonZeroValues(); 
+        IntIterator iter = nonZeroCoverageValues.intIterator();
+        while(iter.hasNext()){
+            int hit_count = iter.next();
+            double  p_i = ((double)hit_count)/totalBranchHitCount;
             sum += Math.pow(p_i, order);
         }
         return Math.pow(sum, 1/(1-order));
