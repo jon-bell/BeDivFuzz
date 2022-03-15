@@ -7,7 +7,7 @@ jobs:
       duration: 10m
       trials: 5
       fuzzer_to_invoke: ./bin/jqf-bediv
-      java_home: /usr/lib/jvm/jdk1.8.0_301/
+      java_home: /usr/lib/jvm/java-11-openjdk-amd64/
       report_on_branches: eval-ci, main
       PROFILE_HEAP: false
     secrets:
