@@ -176,7 +176,7 @@ public class BeDivGuidance extends ZestGuidance{
         }
 
 
-        String plotData = String.format("%d, %d, %d, %d, %d, %d, %d, %d, %d, %.3f, %.3f, %.3f, %d, %d, %d",
+        String plotData = String.format("%d, %d, %d, %d, %d, %d, %d, %d, %d, %.3f, %.3f, %.3f, %.2f%%, %d, %d",
                 TimeUnit.MILLISECONDS.toSeconds(now.getTime()), uniqueFailures.size(), nonZeroCount, nonZeroValidCount,
                 numTrials, numValid, uniqueValidPaths.size(), uniqueBranchSets.size(), uniqueValidInputs.size(),
                 uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2],
