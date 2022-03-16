@@ -397,7 +397,7 @@ public class ZestGuidance implements Guidance {
 
     protected String getStatNames() {
         return "# unix_time, unique_crashes, total_cov, valid_cov, total_inputs, " +
-                "valid_inputs, valid_paths, valid_branch_sets, unique_valid_inputs, " +
+                "valid_inputs, invalid_inputs, valid_paths, valid_branch_sets, unique_valid_inputs, " +
                 "b0, b1, b2";
     }
 
@@ -504,7 +504,7 @@ public class ZestGuidance implements Guidance {
 
         String plotData = String.format("%d, %d, %d, %d, %d, %d, %d, %d, %d, %.3f, %.3f, %.3f",
                 TimeUnit.MILLISECONDS.toSeconds(now.getTime()), uniqueFailures.size(), nonZeroCount, nonZeroValidCount,
-                numTrials, numValid, uniqueValidPaths.size(), uniqueBranchSets.size(), uniqueValidInputs.size(),
+                numTrials, numValid, numTrials-numValid, uniqueValidPaths.size(), uniqueBranchSets.size(), uniqueValidInputs.size(),
                 uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2]
         );
 
