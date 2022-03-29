@@ -49,7 +49,7 @@ public class Coverage implements TraceEventVisitor {
     private final int COVERAGE_MAP_SIZE = (1 << 16) - 1; // Minus one to reduce collisions
 
     /** The coverage counts for each edge. */
-    protected final Counter counter = new NonZeroCachingCounter(COVERAGE_MAP_SIZE);
+    public final Counter counter = new NonZeroCachingCounter(COVERAGE_MAP_SIZE);
 
     /** Creates a new coverage map. */
     public Coverage() {

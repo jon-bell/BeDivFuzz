@@ -141,7 +141,7 @@ public class BeDivGuidance extends ZestGuidance{
         double explorationScore = totalExplorationCount != 0 ?  totalExplorationScore / totalExplorationCount : 0;
         double exploitationScore = totalExploitationCount != 0 ? totalExploitationScore / totalExploitationCount : 0;
 
-        double[] uniquePathsDivMetrics = uniquePathsDivMetricsCounter.getCachedMetrics(now);
+        double[] uniquePathsDivMetrics = uniquePathsDivMetricsCounter.metricsFromCoverage(totalCoverage);
 
         if (console != null ){
             if (LIBFUZZER_COMPAT_OUTPUT) {
@@ -163,7 +163,8 @@ public class BeDivGuidance extends ZestGuidance{
                 console.printf("Queue size:           %,d (%,d favored last cycle)\n", savedInputs.size(), numFavoredLastCycle);
                 console.printf("Current parent input: %s\n", currentParentInputDesc);
                 console.printf("Execution speed:      %,d/sec now | %,d/sec overall\n", intervalExecsPerSec, execsPerSec);
-				console.printf("Valid coverage:       %,d branches (%.2f%% of map)\n", nonZeroValidCount, nonZeroValidFraction);
+                console.printf("Valid coverage:       %,d branches (%.2f%% of map)\n", nonZeroValidCount, nonZeroValidFraction);
+                console.printf("Total coverage:       %,d branches (%.2f%% of map)\n", nonZeroCount, nonZeroFraction);
 				console.printf("Behavioral Diversity: (B(0): %.0f | B(1): %.0f | B(2): %.0f)\n", uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2]);
                 console.printf("Unique valid inputs:  %,d (%.2f%%)\n", uniqueValidInputs.size(),
                         uniqueValidInputs.size() * 100.0 / numTrials);
@@ -351,10 +352,6 @@ public class BeDivGuidance extends ZestGuidance{
             this.numTrials++;
 
             boolean valid = result == Result.SUCCESS;
-
-            if (uniquePaths.add(runCoverage.hashCode())) {
-                uniquePathsDivMetricsCounter.incrementBranchCounts(runCoverage);
-            }
 
             if (valid) {
                 // Increment valid counter

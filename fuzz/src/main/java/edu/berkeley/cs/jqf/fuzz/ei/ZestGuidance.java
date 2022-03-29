@@ -469,7 +469,7 @@ public class ZestGuidance implements Guidance {
         int nonZeroValidCount = validCoverage.getNonZeroCount();
         double nonZeroValidFraction = nonZeroValidCount * 100.0 / validCoverage.size();
 
-        double[] uniquePathsDivMetrics = uniquePathsDivMetricsCounter.getCachedMetrics(now);
+        double[] uniquePathsDivMetrics = uniquePathsDivMetricsCounter.metricsFromCoverage(totalCoverage);
 
         if (console != null) {
             if (LIBFUZZER_COMPAT_OUTPUT) {
@@ -718,11 +718,6 @@ public class ZestGuidance implements Guidance {
             this.numTrials++;
 
             boolean valid = result == Result.SUCCESS;
-
-            if (uniquePaths.add(runCoverage.hashCode())) {
-                uniquePathsDivMetricsCounter.incrementBranchCounts(runCoverage);
-            }
-
 
             if (valid) {
                 // Increment valid counter
