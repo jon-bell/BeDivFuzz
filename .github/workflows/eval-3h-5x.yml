@@ -10,6 +10,6 @@ jobs:
       java_home: /usr/lib/jvm/java-11-openjdk-amd64/
       report_on_branches: eval-ci, main, original-hill-numbers merge-jqf-2.0-snapshot
       runs_on: self-hosted
-      PROFILE_HEAP: true
+      PROFILE_HEAP: false
     secrets:
       INFLUX_TOKEN: ${{ secrets.INFLUX_TOKEN }}
