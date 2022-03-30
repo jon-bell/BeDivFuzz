@@ -76,6 +76,8 @@ public class FuzzStatement extends Statement {
     private final List<Class<?>> expectedExceptions;
     private final List<Throwable> failures = new ArrayList<>();
     private final Guidance guidance;
+    private final int MAX_FAILURES_TO_REPORT = Integer.getInteger("jqf.ei.MAX_FAILURES_REPORT", -1);
+
 
     public FuzzStatement(FrameworkMethod method, TestClass testClass,
                          GeneratorRepository generatorRepository, Guidance fuzzGuidance) {
@@ -189,7 +191,9 @@ public class FuzzStatement extends Statement {
                     } else {
                         result = FAILURE;
                         error = e;
-                        failures.add(e);
+                        if (MAX_FAILURES_TO_REPORT < 0 || failures.size() < MAX_FAILURES_TO_REPORT) {
+                            failures.add(e);
+                        }
                     }
                 }
 
