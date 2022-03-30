@@ -52,7 +52,7 @@ public class BeDivDriver {
             Locale.setDefault(Locale.US);
 
             // Run the Junit test
-            Result res = GuidedFuzzing.run(testClassName, testMethodName, guidance, System.out);
+            Result res = GuidedFuzzing.run(testClassName, testMethodName, guidance, (Boolean.getBoolean("jqf.ei.QUIET_MODE") ? null : System.out));
             if (Boolean.getBoolean("jqf.logCoverage")) {
                 System.out.println(String.format("Covered %d edges.",
                         guidance.getTotalCoverage().getNonZeroCount()));
