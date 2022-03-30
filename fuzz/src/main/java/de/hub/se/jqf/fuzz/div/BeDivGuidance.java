@@ -141,7 +141,7 @@ public class BeDivGuidance extends ZestGuidance{
         double explorationScore = totalExplorationCount != 0 ?  totalExplorationScore / totalExplorationCount : 0;
         double exploitationScore = totalExploitationCount != 0 ? totalExploitationScore / totalExploitationCount : 0;
 
-        double[] uniquePathsDivMetrics = uniquePathsDivMetricsCounter.metricsFromCoverage(totalCoverage);
+        double[] uniquePathsDivMetrics = uniquePathsDivMetricsCounter.metricsFromCoverage(totalCoverageFromUniqueTraces);
 
         if (console != null ){
             if (LIBFUZZER_COMPAT_OUTPUT) {
@@ -352,6 +352,10 @@ public class BeDivGuidance extends ZestGuidance{
             this.numTrials++;
 
             boolean valid = result == Result.SUCCESS;
+
+            if(uniquePaths.add(runCoverage.hashCode())){
+                totalCoverageFromUniqueTraces.updateBits(runCoverage);
+            }
 
             if (valid) {
                 // Increment valid counter

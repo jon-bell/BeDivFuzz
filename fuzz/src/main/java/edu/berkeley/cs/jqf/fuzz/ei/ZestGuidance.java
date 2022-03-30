@@ -145,6 +145,9 @@ public class ZestGuidance implements Guidance {
     /** Cumulative coverage for valid inputs. */
     protected Coverage validCoverage = new Coverage();
 
+    /** Cumulative coverage statistics, only incremented for unique traces. */
+    protected Coverage totalCoverageFromUniqueTraces = new Coverage();
+
     /** Set of hashes of all valid inputs generated so far. */
     protected Set<Integer> uniqueValidInputs = new HashSet<>();
 
@@ -469,7 +472,7 @@ public class ZestGuidance implements Guidance {
         int nonZeroValidCount = validCoverage.getNonZeroCount();
         double nonZeroValidFraction = nonZeroValidCount * 100.0 / validCoverage.size();
 
-        double[] uniquePathsDivMetrics = uniquePathsDivMetricsCounter.metricsFromCoverage(totalCoverage);
+        double[] uniquePathsDivMetrics = uniquePathsDivMetricsCounter.metricsFromCoverage(totalCoverageFromUniqueTraces);
 
         if (console != null) {
             if (LIBFUZZER_COMPAT_OUTPUT) {
@@ -718,6 +721,10 @@ public class ZestGuidance implements Guidance {
             this.numTrials++;
 
             boolean valid = result == Result.SUCCESS;
+
+            if (uniquePaths.add(runCoverage.hashCode())){
+                totalCoverageFromUniqueTraces.updateBits(runCoverage);
+            }
 
             if (valid) {
                 // Increment valid counter
