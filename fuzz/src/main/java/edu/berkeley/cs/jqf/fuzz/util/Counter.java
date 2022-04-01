@@ -89,7 +89,7 @@ public class Counter {
         return Hashing.hash1(k1, k2, size);
     }
 
-    protected int incrementAtIndex(int index, int delta) {
+    public int incrementAtIndex(int index, int delta) {
         return (this.counts[index] += delta);
     }
 

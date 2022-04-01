@@ -41,7 +41,7 @@ public class DivMetricsCounter {
         // First fix the covered branches
         Set<Integer> covered = new HashSet<>(runCoverage.getCovered());
         for (Integer idx : covered) {
-            counter.increment(idx);
+            counter.incrementAtIndex(idx, 1);
             totalBranchHitCount++;
         }
         numExecutions += 1;
