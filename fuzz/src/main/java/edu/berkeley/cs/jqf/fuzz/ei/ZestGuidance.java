@@ -753,7 +753,7 @@ public class ZestGuidance implements Guidance {
             boolean valid = result == Result.SUCCESS;
 
             if (uniquePaths.add(runCoverage.hashCode())){
-                totalCoverageFromUniqueTraces.updateBits(runCoverage);
+                totalCoverageFromUniqueTraces.incrementAll(runCoverage);
             }
 
             if (valid) {

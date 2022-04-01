@@ -57,4 +57,11 @@ public interface ICoverage<T extends Counter> {
     Counter getCounter();
 
     ICoverage<T> copy();
+
+    /**
+     * Similar to updateBits, but adds the values (rather than or'ing them)
+     *
+     * @param runCoverage
+     */
+    void incrementAll(ICoverage runCoverage);
 }

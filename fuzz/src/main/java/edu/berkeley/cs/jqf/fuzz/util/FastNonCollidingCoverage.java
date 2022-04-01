@@ -188,6 +188,28 @@ public class FastNonCollidingCoverage extends FastCoverageListener.Default imple
         return changed;
     }
 
+    @Override
+    public void incrementAll(ICoverage that) {
+        synchronized (this.counter){
+            synchronized (that.getCounter()){
+                FastNonCollidingCounter thatCounter = (FastNonCollidingCounter) that.getCounter();
+                Iterator<IntIntPair> thatIter = thatCounter.counts.keyValuesView().iterator();
+
+                while(thatIter.hasNext()){
+                    IntIntPair coverageEntry = thatIter.next();
+                    int before = this.counter.counts.get(coverageEntry.getOne());
+                    int after = before + coverageEntry.getTwo();
+                    if(after > before){
+                        this.counter.counts.put(coverageEntry.getOne(), after);
+                    }
+                    if(before == 0){
+                        this.counter.nonZeroKeys.add(coverageEntry.getOne());
+                    }
+                }
+            }
+        }
+    }
+
     /** Returns a hash code of the edge counts in the coverage map. */
     @Override
     public int hashCode() {

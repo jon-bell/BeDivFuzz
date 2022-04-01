@@ -377,7 +377,7 @@ public class BeDivGuidance extends ZestGuidance{
             boolean valid = result == Result.SUCCESS;
 
             if(uniquePaths.add(runCoverage.hashCode())){
-                totalCoverageFromUniqueTraces.updateBits(runCoverage);
+                totalCoverageFromUniqueTraces.incrementAll(runCoverage);
             }
 
             if (valid) {
