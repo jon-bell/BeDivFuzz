@@ -188,6 +188,24 @@ public class FastNonCollidingCoverage extends FastCoverageListener.Default imple
         return changed;
     }
 
+    /**
+     * For each probe covered in runCoverage, increment each probe here by one.
+     * @param runCoverage
+     */
+    @Override
+    public void incrementCovered(ICoverage runCoverage) {
+        synchronized (this.counter){
+            FastNonCollidingCounter thatCounter = (FastNonCollidingCounter) runCoverage.getCovered();
+            synchronized (thatCounter){
+                IntIterator thatIter = runCoverage.getCovered().intIterator();
+                while(thatIter.hasNext()){
+                    this.counter.increment(thatIter.next());
+                }
+            }
+        }
+
+    }
+
     /** Returns a hash code of the edge counts in the coverage map. */
     @Override
     public int hashCode() {

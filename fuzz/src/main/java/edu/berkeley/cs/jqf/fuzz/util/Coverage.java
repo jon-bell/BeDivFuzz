@@ -209,6 +209,14 @@ public class Coverage implements TraceEventVisitor, ICoverage<Counter> {
         return changed;
     }
 
+    @Override
+    public void incrementCovered(ICoverage that) {
+        IntIterator thatIter = that.getCovered().intIterator();
+        while(thatIter.hasNext()){
+            this.counter.incrementAtIndex(thatIter.next(), 1);
+        }
+    }
+
     /** Returns a hash code of the edge counts in the coverage map. */
     @Override
     public int hashCode() {
