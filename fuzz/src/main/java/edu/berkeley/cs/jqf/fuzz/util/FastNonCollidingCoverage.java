@@ -195,8 +195,7 @@ public class FastNonCollidingCoverage extends FastCoverageListener.Default imple
     @Override
     public void incrementCovered(ICoverage runCoverage) {
         synchronized (this.counter){
-            FastNonCollidingCounter thatCounter = (FastNonCollidingCounter) runCoverage.getCovered();
-            synchronized (thatCounter){
+            synchronized (runCoverage.getCovered()){
                 IntIterator thatIter = runCoverage.getCovered().intIterator();
                 while(thatIter.hasNext()){
                     this.counter.increment(thatIter.next());

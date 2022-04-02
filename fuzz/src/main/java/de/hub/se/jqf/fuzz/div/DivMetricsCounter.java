@@ -22,7 +22,7 @@ public class DivMetricsCounter {
         double shannon = 0;
         double h_0 = 0;
         double h_2 = 0;
-        double totalBranchHitCount = coveredBranchCounts.count(value -> value > 0);
+        double totalBranchHitCount = coveredBranchCounts.sum();
 
         IntIterator iter = coveredBranchCounts.intIterator();
         while(iter.hasNext()){
