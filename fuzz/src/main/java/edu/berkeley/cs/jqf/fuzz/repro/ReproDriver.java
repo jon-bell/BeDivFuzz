@@ -54,7 +54,8 @@ public class ReproDriver {
             File inputArg = new File(args[i + 2]);
             if (inputArg.isDirectory()) {
                 for (File f : inputArg.listFiles()) {
-                    validFiles.add(f);
+                    if (!f.getName().endsWith("_secondary"))
+                        validFiles.add(f);
                 }
             } else {
                 validFiles.add(inputArg);
