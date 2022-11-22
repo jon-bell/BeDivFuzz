@@ -32,6 +32,7 @@ package edu.berkeley.cs.jqf.fuzz.repro;
 import java.io.File;
 import java.util.ArrayList;
 
+import de.hub.se.jqf.fuzz.repro.DivReproGuidance;
 import edu.berkeley.cs.jqf.fuzz.junit.GuidedFuzzing;
 
 /**
@@ -68,19 +69,20 @@ public class ReproDriver {
             File traceDir = traceDirName != null ? new File(traceDirName) : null;
 
             // Load the guidance
-            ReproGuidance guidance = new ReproGuidance(testInputFiles, traceDir);
+            // ReproGuidance guidance = new ReproGuidance(testInputFiles, traceDir);
+            DivReproGuidance guidance = new DivReproGuidance(testInputFiles, traceDir);
 
             // Run the Junit test
             GuidedFuzzing.run(testClassName, testMethodName, guidance, System.out);
 
-            if (guidance.getBranchesCovered() != null) {
-                String cov = "";
-                for (String s : guidance.getBranchesCovered()) {
-                    cov += "# Covered: " + s + "\n";
-                }
-                final String finalFooter = cov;
-                System.out.println(finalFooter);
-            }
+            // if (guidance.getBranchesCovered() != null) {
+            // String cov = "";
+            // for (String s : guidance.getBranchesCovered()) {
+            // cov += "# Covered: " + s + "\n";
+            // }
+            // final String finalFooter = cov;
+            // System.out.println(finalFooter);
+            // }
 
             if (Boolean.getBoolean("jqf.logCoverage")) {
                 System.out.println(String.format("Covered %d edges.",
