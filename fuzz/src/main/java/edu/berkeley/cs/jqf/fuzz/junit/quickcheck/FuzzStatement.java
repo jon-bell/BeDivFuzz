@@ -45,6 +45,8 @@ import de.hub.se.jqf.fuzz.div.BeDivGuidance;
 import de.hub.se.jqf.fuzz.div.SplitInput;
 import de.hub.se.jqf.fuzz.junit.quickcheck.NonTrackingSplitGenerationStatus;
 import de.hub.se.jqf.fuzz.junit.quickcheck.SplitSourceOfRandomness;
+import de.hub.se.jqf.fuzz.repro.DivReproGuidance;
+import de.hub.se.jqf.fuzz.repro.DivReproGuidance.SplitReproInput;
 import edu.berkeley.cs.jqf.fuzz.guidance.Guidance;
 import edu.berkeley.cs.jqf.fuzz.guidance.GuidanceException;
 import edu.berkeley.cs.jqf.fuzz.guidance.TimeoutException;
@@ -78,9 +80,8 @@ public class FuzzStatement extends Statement {
     private final Guidance guidance;
     private final int MAX_FAILURES_TO_REPORT = Integer.getInteger("jqf.ei.MAX_FAILURES_REPORT", -1);
 
-
     public FuzzStatement(FrameworkMethod method, TestClass testClass,
-                         GeneratorRepository generatorRepository, Guidance fuzzGuidance) {
+            GeneratorRepository generatorRepository, Guidance fuzzGuidance) {
         this.method = method;
         this.testClass = testClass;
         this.generics = GenericsResolver.resolve(testClass.getJavaClass())
@@ -89,7 +90,6 @@ public class FuzzStatement extends Statement {
         this.expectedExceptions = Arrays.asList(method.getMethod().getExceptionTypes());
         this.guidance = fuzzGuidance;
     }
-
 
     /**
      * Run the test.
@@ -120,16 +120,31 @@ public class FuzzStatement extends Statement {
                         // Generate input values
                         if (guidance instanceof BeDivGuidance) {
                             SplitInput input = ((BeDivGuidance) guidance).getSplitInput();
-                            StreamBackedRandom primaryRandomFile = new StreamBackedRandom(input.createPrimaryParameterStream(), Long.BYTES);
-                            StreamBackedRandom secondaryRandomFile = new StreamBackedRandom(input.createSecondaryParameterStream(), Long.BYTES);
-                            SplitSourceOfRandomness random = new SplitSourceOfRandomness(primaryRandomFile, secondaryRandomFile);
+                            StreamBackedRandom primaryRandomFile = new StreamBackedRandom(
+                                    input.createPrimaryParameterStream(), Long.BYTES);
+                            StreamBackedRandom secondaryRandomFile = new StreamBackedRandom(
+                                    input.createSecondaryParameterStream(), Long.BYTES);
+                            SplitSourceOfRandomness random = new SplitSourceOfRandomness(primaryRandomFile,
+                                    secondaryRandomFile);
                             GenerationStatus genStatus = new NonTrackingSplitGenerationStatus(random);
                             args = generators.stream()
                                     .map(g -> g.generate(random, genStatus))
                                     .toArray();
 
-                        }
-                        else {
+                        } else if (guidance instanceof DivReproGuidance) {
+                            SplitReproInput input = ((DivReproGuidance) guidance).getSplitReproInput();
+                            StreamBackedRandom primaryRandomFile = new StreamBackedRandom(
+                                    input.primaryParameterStream, Long.BYTES);
+                            StreamBackedRandom secondaryRandomFile = new StreamBackedRandom(
+                                    input.secondaryParameterStream, Long.BYTES);
+                            SplitSourceOfRandomness random = new SplitSourceOfRandomness(primaryRandomFile,
+                                    secondaryRandomFile);
+                            GenerationStatus genStatus = new NonTrackingSplitGenerationStatus(random);
+                            args = generators.stream()
+                                    .map(g -> g.generate(random, genStatus))
+                                    .toArray();
+
+                        } else {
                             StreamBackedRandom randomFile = new StreamBackedRandom(guidance.getInput(), Long.BYTES);
                             SourceOfRandomness random = new SourceOfRandomness(randomFile);
                             GenerationStatus genStatus = new NonTrackingGenerationStatus(random);
@@ -142,14 +157,13 @@ public class FuzzStatement extends Statement {
                         // Let guidance observe the generated input args
                         guidance.observeGeneratedArgs(args);
 
-
-
                     } catch (IllegalStateException e) {
                         if (e.getCause() instanceof EOFException) {
                             // This happens when we reach EOF before reading all the random values.
                             // Treat this as an assumption failure, so that the guidance considers the
                             // generated input as INVALID
-                            throw new AssumptionViolatedException("StreamBackedRandom does not have enough data", e.getCause());
+                            throw new AssumptionViolatedException("StreamBackedRandom does not have enough data",
+                                    e.getCause());
                         } else {
                             throw e;
                         }
@@ -171,7 +185,7 @@ public class FuzzStatement extends Statement {
 
                     // If we reached here, then the trial must be a success
                     result = SUCCESS;
-                } catch(InstrumentationException e) {
+                } catch (InstrumentationException e) {
                     // Throw a guidance exception outside to stop fuzzing
                     throw new GuidanceException(e);
                 } catch (GuidanceException e) {
@@ -207,7 +221,6 @@ public class FuzzStatement extends Statement {
                     throw new GuidanceException(e);
                 }
 
-
             }
         } catch (GuidanceException e) {
             System.err.println("Fuzzing stopped due to guidance exception: " + e.getMessage());
@@ -231,7 +244,7 @@ public class FuzzStatement extends Statement {
      *
      * @param e the class of an exception that is thrown
      * @return <code>true</code> if e is a subclass of any exception specified
-     * in the <code>throws</code> clause of the trial method.
+     *         in the <code>throws</code> clause of the trial method.
      */
     private boolean isExceptionExpected(Class<? extends Throwable> e) {
         for (Class<?> expectedException : expectedExceptions) {
