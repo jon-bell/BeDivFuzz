@@ -377,8 +377,32 @@ public class BeDivFuzzGuidance extends ZestGuidance implements BeDivGuidance {
                 // Determine if this input should be saved
                 List<String> savingCriteriaSatisfied = checkSavingCriteriaSatisfied(result);
                 boolean toSave = savingCriteriaSatisfied.size() > 0;
+                boolean toSaveToDiskButNotAddToSeeds = savingCriteriaSatisfied.size() == 1 && savingCriteriaSatisfied.get(0).equals("+invalidCov");
 
-                if (toSave) {
+                if (toSaveToDiskButNotAddToSeeds){
+                    // Trim input (remove unused keys)
+                    currentInput.gc();
+
+                    // Make sure it is not empty
+                    assert(currentInput.primaryInput.size() > 0 || currentInput.secondaryInput.size() > 0);
+
+                    // Save the input to disk without adding to queue
+                    int newInputIdx = numSavedInputs++;
+                    String primarySaveFileName = String.format("id_%06d", newInputIdx);
+                    File primarySaveFile = new File(savedCorpusDirectory, primarySaveFileName);
+
+                    String secondarySaveFileName = primarySaveFileName + "_secondary";
+                    File secondarySaveFile = new File(savedCorpusDirectory, secondarySaveFileName);
+
+                    try {
+                        writeInputToFile(currentInput.primaryInput,primarySaveFile);
+                        writeInputToFile(currentInput.secondaryInput,secondarySaveFile);
+                    } catch (IOException e) {
+                        throw new GuidanceException(e);
+                    }
+
+                }
+                else if (toSave) {
                     // Add new valid structure which has increased coverage
                     exploredInputStructures.add(currentInput.primaryInput.hashCode());
 
@@ -514,8 +538,18 @@ public class BeDivFuzzGuidance extends ZestGuidance implements BeDivGuidance {
             maxCoverage = nonZeroAfter;
         }
 
+        // Possibly save input
+        List<String> reasonsToSave = new ArrayList<>();
+
         // Invalid input, return
         if (result != Result.SUCCESS) {
+            if(result == Result.INVALID && coverageBitsUpdated){
+                /* BeDivFuzz doesn't save invalid inputs. That's fine to not add them to the corpus as seeds.
+                But: If they are not saved to the filesystem, it will be impossible to reproduce what might be a new,
+                coverage-revealing input! Save it to disk, so a post-hoc JaCoCo or other analysis can include that coverage.
+                */
+                reasonsToSave.add("+invalidCov");
+            }
             return new ArrayList<>();
         }
 
@@ -582,9 +616,6 @@ public class BeDivFuzzGuidance extends ZestGuidance implements BeDivGuidance {
                     break;
             }
         }
-
-        // Possibly save input
-        List<String> reasonsToSave = new ArrayList<>();
 
         boolean isNewStructure = !exploredInputStructures.contains(((LinearInput) currentInput.primaryInput).hashCode());
         boolean newValidCoverage = validNonZeroAfter > validNonZeroBefore;
