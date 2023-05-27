@@ -60,7 +60,7 @@ jobs:
       matrix-analyze: ${{ steps.set-matrix.outputs.matrix-analyze }}
       base-url: ${{ steps.set-matrix.outputs.base-url }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set matrix for evaluation
         id: set-matrix
         run: |
@@ -79,7 +79,7 @@ jobs:
     strategy:
         matrix: ${{fromJson(needs.build-matrix.outputs.matrix-run)}}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Telegraf config
         uses: DamianReeves/write-file-action@v1.0
         with:
@@ -226,7 +226,7 @@ jobs:
       DURATION: ${{ inputs.duration }}
       JAVA_HOME: ${{ inputs.java_home }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/download-artifact@v2
       - id: repro
         name: Repro
@@ -263,7 +263,7 @@ jobs:
       RENV_PATHS_ROOT: /ci-logs/renv
       PROFILE_HEAP: ${{ inputs.PROFILE_HEAP }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           repository: 'jon-bell/fuzzing-build-site-action'
           ref: 'main'
