@@ -2,7 +2,7 @@ name: Smoke test evaluation - 10 minutes, 5 trials
 on: [push, pull_request, workflow_dispatch]
 jobs:
   evaluate:
-    uses: jon-bell/BeDivFuzz/.github/workflows/evaluation-workflow.yml@eval-ci
+    uses: jon-bell/BeDivFuzz/.github/workflows/evaluation-workflow.yml@ci-23
     with:
       duration: 10m
       trials: 5
