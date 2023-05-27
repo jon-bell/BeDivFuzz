@@ -2,7 +2,7 @@ name: Thin Evaluation - 24 hours, 5 trials
 on: workflow_dispatch
 jobs:
   evaluate:
-    uses: jon-bell/BeDivFuzz/.github/workflows/evaluation-workflow.yml@eval-ci
+    uses: jon-bell/BeDivFuzz/.github/workflows/evaluation-workflow.yml@ci-23
     with:
       duration: 24h
       trials: 5
