@@ -41,8 +41,10 @@ import com.pholser.junit.quickcheck.generator.Generator;
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext;
 import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository;
 import com.pholser.junit.quickcheck.random.SourceOfRandomness;
-import de.hub.se.jqf.fuzz.div.BeDivGuidance;
+import de.hub.se.jqf.fuzz.div.BeDivFuzzGuidance;
 import de.hub.se.jqf.fuzz.div.SplitInput;
+import de.hub.se.jqf.fuzz.div.SplitLinearInput;
+import de.hub.se.jqf.fuzz.guidance.BeDivGuidance;
 import de.hub.se.jqf.fuzz.junit.quickcheck.NonTrackingSplitGenerationStatus;
 import de.hub.se.jqf.fuzz.junit.quickcheck.SplitSourceOfRandomness;
 import edu.berkeley.cs.jqf.fuzz.guidance.Guidance;
@@ -50,6 +52,7 @@ import edu.berkeley.cs.jqf.fuzz.guidance.GuidanceException;
 import edu.berkeley.cs.jqf.fuzz.guidance.TimeoutException;
 import edu.berkeley.cs.jqf.fuzz.guidance.Result;
 import edu.berkeley.cs.jqf.fuzz.guidance.StreamBackedRandom;
+import edu.berkeley.cs.jqf.fuzz.junit.TrialRunner;
 import edu.berkeley.cs.jqf.instrument.InstrumentationException;
 import org.junit.AssumptionViolatedException;
 import org.junit.runners.model.FrameworkMethod;
@@ -76,6 +79,7 @@ public class FuzzStatement extends Statement {
     private final List<Class<?>> expectedExceptions;
     private final List<Throwable> failures = new ArrayList<>();
     private final Guidance guidance;
+    private boolean skipExceptionSwallow;
 
     public FuzzStatement(FrameworkMethod method, TestClass testClass,
                          GeneratorRepository generatorRepository, Guidance fuzzGuidance) {
@@ -86,8 +90,8 @@ public class FuzzStatement extends Statement {
         this.generatorRepository = generatorRepository;
         this.expectedExceptions = Arrays.asList(method.getMethod().getExceptionTypes());
         this.guidance = fuzzGuidance;
+        this.skipExceptionSwallow = Boolean.getBoolean("jqf.failOnDeclaredExceptions");
     }
-
 
     /**
      * Run the test.
@@ -99,7 +103,7 @@ public class FuzzStatement extends Statement {
         // Construct generators for each parameter
         List<Generator<?>> generators = Arrays.stream(method.getMethod().getParameters())
                 .map(this::createParameterTypeContext)
-                .map(this::produceGenerator)
+                .map(generatorRepository::produceGenerator)
                 .collect(Collectors.toList());
 
         // Keep fuzzing until no more input or I/O error with guidance
@@ -125,7 +129,6 @@ public class FuzzStatement extends Statement {
                             args = generators.stream()
                                     .map(g -> g.generate(random, genStatus))
                                     .toArray();
-
                         }
                         else {
                             StreamBackedRandom randomFile = new StreamBackedRandom(guidance.getInput(), Long.BYTES);
@@ -139,15 +142,11 @@ public class FuzzStatement extends Statement {
 
                         // Let guidance observe the generated input args
                         guidance.observeGeneratedArgs(args);
-
-
-
                     } catch (IllegalStateException e) {
                         if (e.getCause() instanceof EOFException) {
                             // This happens when we reach EOF before reading all the random values.
-                            // Treat this as an assumption failure, so that the guidance considers the
-                            // generated input as INVALID
-                            throw new AssumptionViolatedException("StreamBackedRandom does not have enough data", e.getCause());
+							// The only thing we can do is try again
+							continue;
                         } else {
                             throw e;
                         }
@@ -160,8 +159,6 @@ public class FuzzStatement extends Statement {
                     } catch (Throwable e) {
                         // Throw the guidance exception outside to stop fuzzing
                         throw new GuidanceException(e);
-                    } finally {
-                        // System.out.println(randomFile.getTotalBytesRead() + " random bytes read");
                     }
 
                     // Attempt to run the trial
@@ -230,6 +227,9 @@ public class FuzzStatement extends Statement {
      * in the <code>throws</code> clause of the trial method.
      */
     private boolean isExceptionExpected(Class<? extends Throwable> e) {
+        if (skipExceptionSwallow) {
+            return false;
+        }
         for (Class<?> expectedException : expectedExceptions) {
             if (expectedException.isAssignableFrom(e)) {
                 return true;
@@ -240,14 +240,5 @@ public class FuzzStatement extends Statement {
 
     private ParameterTypeContext createParameterTypeContext(Parameter parameter) {
         return ParameterTypeContext.forParameter(parameter, generics).annotate(parameter);
-    }
-
-    private Generator<?> produceGenerator(ParameterTypeContext parameter) {
-        Generator<?> generator = generatorRepository.generatorFor(parameter);
-        generator.provide(generatorRepository);
-        generator.configure(parameter.annotatedType());
-        if (parameter.topLevel())
-            generator.configure(parameter.annotatedElement());
-        return generator;
     }
 }

@@ -177,6 +177,14 @@ public class ThreadTracer {
     }
     
     private static boolean sameNameDesc(MemberRef m1, MemberRef m2) {
+        // Bypass checks for all function calls from java/util/function
+        // which are used by lambda function calls.
+        if ((m2 != null && m2.getOwner().contains("java/util/function")) ||
+                (m1 != null && m1.getName().startsWith("lambda$")) ||
+                (m2 != null && m2.getOwner().startsWith("java/util/stream"))
+        ) {
+            return true;
+        }
         return m1 != null && m2 != null &&
                 m1.getName().equals(m2.getName()) &&
                 m1.getDesc().equals(m2.getDesc());
@@ -228,7 +236,7 @@ public class ThreadTracer {
                 // Trace continues with callee
                 int invokerIid = invokeTarget != null ? ((Instruction) invokeTarget).iid : -1;
                 int invokerMid = invokeTarget != null ? ((Instruction) invokeTarget).mid : -1;
-                emit(new CallEvent(invokerIid, this.method, invokerMid, begin));
+                emit(new CallEvent(invokerIid, this.method, invokerMid, begin, begin.getObject()));
                 handlers.push(new TraceEventGeneratingHandler(begin, depth+1));
             } else {
                 // Class loading or static initializer
@@ -241,7 +249,7 @@ public class ThreadTracer {
         @Override
         public void visitINVOKEMETHOD_EXCEPTION(INVOKEMETHOD_EXCEPTION ins) {
             if (this.invokeTarget == null) {
-                throw new InstrumentationException("Unexpected INVOKEMETHOD_EXCEPTION");
+                throw new InstrumentationException("Unexpected INVOKEMETHOD_EXCEPTION", ins.getException());
             } else {
                 // Unset the invocation target for the rest of the instruction stream
                 this.invokeTarget = null;
