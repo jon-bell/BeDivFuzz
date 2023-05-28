@@ -454,7 +454,7 @@ public class ZestGuidance implements Guidance {
         return "# unix_time, cycles_done, cur_path, paths_total, pending_total, " +
                 "pending_favs, map_size, unique_crashes, unique_hangs, max_depth, execs_per_sec, " +
                 "valid_inputs, invalid_inputs, valid_cov, all_covered_probes, valid_covered_probes, " +
-                "b0, b1, b2";
+                "b0, b1, b2, total_cov, total_inputs";
     }
 
     /* Writes a line of text to a given log file. */
@@ -569,15 +569,15 @@ public class ZestGuidance implements Guidance {
             }
         }
 
-        String plotData = String.format("%d, %d, %d, %d, %d, %d, %.2f%%, %d, %d, %d, %.2f, %d, %d, %.2f%%, %d, %d",
+        String plotData = String.format("%d, %d, %d, %d, %d, %d, %.2f%%, %d, %d, %d, %.2f, %d, %d, %.2f%%, %d, %d, %d, %d",
                 TimeUnit.MILLISECONDS.toSeconds(now.getTime()), cyclesCompleted, currentParentInputIdx,
                 numSavedInputs, 0, 0, nonZeroFraction, uniqueFailures.size(), 0, 0, intervalExecsPerSecDouble,
                 numValid, numTrials-numValid, nonZeroValidFraction, nonZeroCount, nonZeroValidCount,
-				uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2]);
+				uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2], nonZeroCount, numTrials);
         appendLineToFile(statsFile, plotData);
     }
 
-    /** Updates the data in the coverage file */ 
+    /** Updates the data in the coverage file */
     protected void updateCoverageFile() {
         try {
             PrintWriter pw = new PrintWriter(coverageFile);
@@ -588,7 +588,7 @@ public class ZestGuidance implements Guidance {
             throw new GuidanceException(ignore);
         }
     }
-    
+
     /* Returns the banner to be displayed on the status screen */
     protected String getTitle() {
         if (blind) {
