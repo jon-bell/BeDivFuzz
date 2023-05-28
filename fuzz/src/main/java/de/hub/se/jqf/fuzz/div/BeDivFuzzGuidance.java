@@ -168,7 +168,8 @@ public class BeDivFuzzGuidance extends ZestGuidance implements BeDivGuidance {
                 console.printf("Current parent input: %s\n", currentParentInputDesc);
                 console.printf("Execution speed:      %,d/sec now | %,d/sec overall\n", intervalExecsPerSec, execsPerSec);
 				console.printf("Valid coverage:       %,d branches (%.2f%% of map)\n", nonZeroValidCount, nonZeroValidFraction);
-				console.printf("Behavioral Diversity: (B(0): %.0f | B(1): %.0f | B(2): %.0f)\n", uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2]);
+                console.printf("Total coverage:       %,d branches (%.2f%% of map)\n", nonZeroCount, nonZeroFraction);
+                console.printf("Behavioral Diversity: (B(0): %.0f | B(1): %.0f | B(2): %.0f)\n", uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2]);
                 console.printf("Unique valid inputs:  %,d (%.2f%%)\n", uniqueValidInputs.size(),
                         uniqueValidInputs.size() * 100.0 / numTrials);
                 console.printf("Unique valid paths:   %,d \n", uniqueValidPaths.size());
@@ -180,11 +181,11 @@ public class BeDivFuzzGuidance extends ZestGuidance implements BeDivGuidance {
         }
 
 
-        String plotData = String.format("%d, %d, %d, %d, %d, %d, %d, %d, %d, %.3f, %.3f, %.3f",
-                TimeUnit.MILLISECONDS.toSeconds(now.getTime()), uniqueFailures.size(), nonZeroCount, nonZeroValidCount,
-                numTrials, numValid, uniqueValidPaths.size(), uniqueBranchSets.size(), uniqueValidInputs.size(),
-                uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2]
-        );
+        String plotData = String.format("%d, %d, %d, %d, %d, %d, %.2f, %d, %d, %d, %.2f, %d, %d, %.2f%%, %d, %d, %.2f, %.2f, %.2f, %d, %d",
+                TimeUnit.MILLISECONDS.toSeconds(now.getTime()), cyclesCompleted, currentParentInputIdx,
+                numSavedInputs, 0, 0, nonZeroFraction, uniqueFailures.size(), 0, 0, intervalExecsPerSecDouble,
+                numValid, numTrials-numValid, nonZeroValidFraction, nonZeroCount, nonZeroValidCount,
+                uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2], nonZeroCount, numTrials);
 
         appendLineToFile(statsFile, plotData);
 
