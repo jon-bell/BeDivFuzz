@@ -180,11 +180,11 @@ public class BeDivFuzzGuidance extends ZestGuidance implements BeDivGuidance {
         }
 
 
-        String plotData = String.format("%d, %d, %d, %d, %d, %d, %d, %d, %d, %.3f, %.3f, %.3f",
-                TimeUnit.MILLISECONDS.toSeconds(now.getTime()), uniqueFailures.size(), nonZeroCount, nonZeroValidCount,
-                numTrials, numValid, uniqueValidPaths.size(), uniqueBranchSets.size(), uniqueValidInputs.size(),
-                uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2]
-        );
+        String plotData = String.format("%d, %d, %d, %d, %d, %d, %.2f%%, %d, %d, %d, %.2f, %d, %d, %.2f%%, %d, %d, %d, %d",
+                TimeUnit.MILLISECONDS.toSeconds(now.getTime()), cyclesCompleted, currentParentInputIdx,
+                numSavedInputs, 0, 0, nonZeroFraction, uniqueFailures.size(), 0, 0, intervalExecsPerSecDouble,
+                numValid, numTrials-numValid, nonZeroValidFraction, nonZeroCount, nonZeroValidCount,
+                uniquePathsDivMetrics[0], uniquePathsDivMetrics[1], uniquePathsDivMetrics[2], nonZeroCount, numTrials);
 
         appendLineToFile(statsFile, plotData);
 

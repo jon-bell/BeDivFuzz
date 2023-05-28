@@ -22,7 +22,7 @@ fi
 
 JACOCO_SOURCES=$ROOT_DIR/examples/target/dependency-sources
 if [ ! -d $JACOCO_SOURCES ]; then
-  (cd $ROOT_DIR/examples && mvn dependency:unpack-dependencies -Dclassifier=sources -DincludeArtifactIds=maven-model,closure-compiler,rhino,ant,bcel -DoutputDirectory=target/dependency-sources)
+  (cd $ROOT_DIR/examples && mvn -B dependency:unpack-dependencies -Dclassifier=sources -DincludeArtifactIds=maven-model,closure-compiler,rhino,ant,bcel -DoutputDirectory=target/dependency-sources)
 fi
 
 JACOCO_UTIL_JAR=$ROOT_DIR/target/jacoco-utils-1.0-SNAPSHOT.jar
