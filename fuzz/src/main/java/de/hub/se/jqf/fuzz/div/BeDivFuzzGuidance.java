@@ -26,6 +26,12 @@ public class BeDivFuzzGuidance extends ZestGuidance implements BeDivGuidance {
     /** Set of saved inputs to fuzz. */
     protected ArrayList<SplitLinearInput> savedInputs = new ArrayList<>();
 
+    /**
+     * A separate index to trap saved invalid inputs so that the numbers don't collide
+     */
+    protected int numSavedInvalidInputs = 0;
+
+
     /** Set of input structures explored so far. */
     protected Set<Integer> exploredInputStructures = new HashSet<>();
 
@@ -367,7 +373,7 @@ public class BeDivFuzzGuidance extends ZestGuidance implements BeDivGuidance {
                 // We won't add any coverage hash yet as we still need to decide whether to save the input
             }
 
-            if (result == Result.SUCCESS || (result == Result.INVALID && !SAVE_ONLY_VALID)) {
+            if (result == Result.SUCCESS || result == Result.INVALID) {
 
                 // Compute a list of keys for which this input can assume responsiblity.
                 // Newly covered branches are always included.
@@ -380,7 +386,7 @@ public class BeDivFuzzGuidance extends ZestGuidance implements BeDivGuidance {
                 boolean toSave = savingCriteriaSatisfied.size() > 0;
                 boolean toSaveToDiskButNotAddToSeeds = savingCriteriaSatisfied.size() == 1 && savingCriteriaSatisfied.get(0).equals("+invalidCov");
 
-                if (toSaveToDiskButNotAddToSeeds){
+                if (SAVE_ONLY_VALID && toSaveToDiskButNotAddToSeeds){
                     // Trim input (remove unused keys)
                     currentInput.gc();
 
@@ -388,8 +394,8 @@ public class BeDivFuzzGuidance extends ZestGuidance implements BeDivGuidance {
                     assert(currentInput.primaryInput.size() > 0 || currentInput.secondaryInput.size() > 0);
 
                     // Save the input to disk without adding to queue
-                    int newInputIdx = numSavedInputs++;
-                    String primarySaveFileName = String.format("id_%06d", newInputIdx);
+                    int newInputIdx = numSavedInvalidInputs++;
+                    String primarySaveFileName = String.format("id_invalid_%06d", newInputIdx);
                     File primarySaveFile = new File(savedCorpusDirectory, primarySaveFileName);
 
                     String secondarySaveFileName = primarySaveFileName + "_secondary";
@@ -440,7 +446,7 @@ public class BeDivFuzzGuidance extends ZestGuidance implements BeDivGuidance {
                     //updateCoverageFile();
                 } else {
                     // Input has not been saved, transfer any remaining responsibilities to parent
-                    if (responsibilities.size() > 0) {
+                    if (savedInputs.size() > currentParentInputIdx && responsibilities.size() > 0) {
                         // Transfer responsibilities to parent input
                         if (savedInputs.isEmpty()) {
                             throw new GuidanceException("Empty queue, cannot transfer responsibilities.");
@@ -551,7 +557,7 @@ public class BeDivFuzzGuidance extends ZestGuidance implements BeDivGuidance {
                 */
                 reasonsToSave.add("+invalidCov");
             }
-            return new ArrayList<>();
+            return reasonsToSave;
         }
 
         // From here on, we can assume validity of the input
