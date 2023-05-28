@@ -30,7 +30,9 @@
 package edu.berkeley.cs.jqf.fuzz.repro;
 
 import java.io.File;
+import java.util.ArrayList;
 
+import de.hub.se.jqf.fuzz.repro.BeDivReproGuidance;
 import edu.berkeley.cs.jqf.fuzz.junit.GuidedFuzzing;
 
 /**
@@ -47,10 +49,20 @@ public class ReproDriver {
 
         String testClassName  = args[0];
         String testMethodName = args[1];
-        File[] testInputFiles = new File[args.length - 2];
-        for (int i = 0; i < testInputFiles.length; i++) {
-            testInputFiles[i] = new File(args[i+2]);
+        ArrayList<File> validFiles = new ArrayList<>();
+        for (int i = 0; i < args.length - 2; i++) {
+            File inputArg = new File(args[i + 2]);
+            if (inputArg.isDirectory()) {
+                for (File f : inputArg.listFiles()) {
+                    if (!f.getName().endsWith("_secondary"))
+                        validFiles.add(f);
+                }
+            } else {
+                validFiles.add(inputArg);
+            }
         }
+        File[] testInputFiles = new File[validFiles.size()];
+        testInputFiles = validFiles.toArray(testInputFiles);
 
         try {
             // Maybe log the trace
@@ -58,21 +70,21 @@ public class ReproDriver {
             File traceDir = traceDirName != null ? new File(traceDirName) : null;
 
             // Load the guidance
-            ReproGuidance guidance = new ReproGuidance(testInputFiles, traceDir);
+            BeDivReproGuidance guidance = new BeDivReproGuidance(testInputFiles, traceDir);
 
             // Run the Junit test
             GuidedFuzzing.run(testClassName, testMethodName, guidance, System.out);
 
 
 
-            if (guidance.getBranchesCovered() != null) {
-                String cov = "";
-                for (String s : guidance.getBranchesCovered()) {
-                    cov += "# Covered: " + s + "\n";
-                }
-                final String finalFooter = cov;
-                System.out.println(finalFooter);
-            }
+            //if (guidance.getBranchesCovered() != null) {
+            //    String cov = "";
+            //    for (String s : guidance.getBranchesCovered()) {
+            //        cov += "# Covered: " + s + "\n";
+            //    }
+            //    final String finalFooter = cov;
+            //    System.out.println(finalFooter);
+            //}
 
             if (Boolean.getBoolean("jqf.logCoverage")) {
                 System.out.println(String.format("Covered %d edges.",
