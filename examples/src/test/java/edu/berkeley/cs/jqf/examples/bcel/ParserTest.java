@@ -34,8 +34,10 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import com.pholser.junit.quickcheck.From;
+import de.hub.se.jqf.bedivfuzz.BeDivFuzz;
+import de.hub.se.jqf.bedivfuzz.examples.bcel.SplitJavaClassGenerator;
+import edu.berkeley.cs.jqf.examples.common.ByteArrayWrapper;
 import edu.berkeley.cs.jqf.fuzz.Fuzz;
-import edu.berkeley.cs.jqf.fuzz.JQF;
 import org.apache.bcel.Repository;
 import org.apache.bcel.classfile.ClassFormatException;
 import org.apache.bcel.classfile.ClassParser;
@@ -49,7 +51,7 @@ import org.junit.runner.RunWith;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assume.assumeThat;
 
-@RunWith(JQF.class)
+@RunWith(BeDivFuzz.class)
 public class ParserTest {
 
     @Fuzz
@@ -77,6 +79,16 @@ public class ParserTest {
             javaClass.dump(out);
 
             ByteArrayInputStream in = new ByteArrayInputStream(out.toByteArray());
+            testWithInputStream(in);
+        } catch (ClassFormatException e) {
+            throw e;
+        }
+    }
+
+    @Fuzz
+    public void testWithByteArrayGenerator(@From(ByteArrayJavaClassGenerator.class) ByteArrayWrapper javaClass) throws IOException {
+        try {
+            ByteArrayInputStream in = new ByteArrayInputStream(javaClass.getByteArray());
             testWithInputStream(in);
         } catch (ClassFormatException e) {
             throw e;

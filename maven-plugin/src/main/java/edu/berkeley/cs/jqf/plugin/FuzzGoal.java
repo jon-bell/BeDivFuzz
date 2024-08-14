@@ -40,8 +40,10 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Random;
 
+import de.hub.se.jqf.bedivfuzz.guidance.BeDivFuzzGuidance;
 import edu.berkeley.cs.jqf.fuzz.ei.ExecutionIndexingGuidance;
 import edu.berkeley.cs.jqf.fuzz.ei.ZestGuidance;
+import edu.berkeley.cs.jqf.fuzz.guidance.Guidance;
 import edu.berkeley.cs.jqf.fuzz.guidance.GuidanceException;
 import edu.berkeley.cs.jqf.fuzz.junit.GuidedFuzzing;
 import edu.berkeley.cs.jqf.instrument.InstrumentingClassLoader;
@@ -101,6 +103,14 @@ public class FuzzGoal extends AbstractMojo {
      */
     @Parameter(property="method", required=true)
     private String testMethod;
+
+    /**
+     * The instrumentation method.
+     *
+     * <p>One of 'janala' and 'fast'. Default is 'fast'.</p>
+     */
+    @Parameter(property="instrumentation", defaultValue="fast")
+    private String instrumentation;
 
     /**
      * Comma-separated list of FQN prefixes to exclude from
@@ -182,10 +192,31 @@ public class FuzzGoal extends AbstractMojo {
     /**
      * The fuzzing engine.
      *
-     * <p>One of 'zest' and 'zeal'. Default is 'zest'.</p>
+     * <p>One of 'zest', 'zeal', and 'bedivfuzz'. Default is 'bedivfuzz'.</p>
      */
-    @Parameter(property="engine", defaultValue="zest")
+    @Parameter(property="engine", defaultValue="bedivfuzz")
     private String engine;
+
+
+    /**
+     * Whether to track coverage and behavioral diversity of semantic analysis classes.
+     *
+     * <p>The packages/classes that should be considered as part of
+     * the semantic analysis stage need to be specified with the
+     * -DsemanticAnalysisClasses parameter.</p>
+     */
+    @Parameter(property = "trackSemanticCoverage")
+    private boolean trackSemanticCoverage;
+
+    /**
+     * Comma-separated list of FQN prefixes to consider as
+     * semantic analysis classes. Can be specified as
+     * regular expressions.
+     *
+     */
+    @Parameter(property = "semanticAnalysisClasses")
+    private String semanticAnalysisClasses;
+
 
     /**
      * Whether to disable code-coverage instrumentation.
@@ -223,6 +254,14 @@ public class FuzzGoal extends AbstractMojo {
     private String outputDirectory;
 
     /**
+     * Whether to NOT save the input queue to disk.
+     *
+     * <p>If not provided, defaults to {@code false}.</p>
+     */
+    @Parameter(property="disableSaveQueue")
+    private boolean disableSaveQueue;
+
+    /**
      * Whether to save ALL inputs generated during fuzzing, even
      * the ones that do not have any unique code coverage.
      *
@@ -232,6 +271,33 @@ public class FuzzGoal extends AbstractMojo {
      */
     @Parameter(property="saveAll")
     private boolean saveAll;
+
+    /**
+     * Whether to save all inputs generated during fuzzing that
+     * covered unique paths.
+     *
+     * <p>This setting leads to a larger number of files being
+     * created in the output directory, and could potentially
+     * reduce the overall performance of fuzzing.</p>
+     */
+    @Parameter(property="saveUniquePathInputs")
+    private boolean saveUniquePathInputs;
+
+    /**
+     * Whether to save the latest branch hit count map as part of the output.
+     *
+     * <p>This writes the branch hit count map to a 'branch_hit_counts' file that
+     * can be deserialized into an IntIntHashMap using jackson-databind.</p>
+     */
+    @Parameter(property="saveBranchHitCounts")
+    private boolean saveBranchHitCounts;
+
+    /**
+     *  The minimum amount of time (in millis) between two stats refreshes.
+     */
+    @Parameter(property="statsRefreshTimePeriod")
+    private int statsRefreshTimePeriod;
+
 
     /**
      * Weather to use libFuzzer like output instead of AFL like stats
@@ -294,6 +360,18 @@ public class FuzzGoal extends AbstractMojo {
         PrintStream out = log.isDebugEnabled() ? System.out : null;
         Result result;
 
+        // Configure instrumentation
+        switch (instrumentation) {
+            case "fast":
+                System.setProperty("useFastNonCollidingCoverageInstrumentation", String.valueOf(true));
+                break;
+            case "janala":
+                System.setProperty("useFastNonCollidingCoverageInstrumentation", String.valueOf(false));
+                break;
+            default:
+                throw new MojoExecutionException("Unknown instrumentation method: " + instrumentation);
+        }
+
         // Configure classes to instrument
         if (excludes != null) {
             System.setProperty("janala.excludes", excludes);
@@ -303,8 +381,20 @@ public class FuzzGoal extends AbstractMojo {
         }
 
         // Configure Zest Guidance
+        if (disableSaveQueue) {
+            System.setProperty("jqf.ei.DISABLE_LOG_QUEUE", "true");
+        }
         if (saveAll) {
             System.setProperty("jqf.ei.SAVE_ALL_INPUTS", "true");
+        }
+        if (saveUniquePathInputs) {
+            System.setProperty("jqf.ei.LOG_UNIQUE_PATH_INPUTS", "true");
+        }
+        if (saveBranchHitCounts) {
+            System.setProperty("jqf.guidance.SERIALIZE_BRANCH_HIT_COUNTS", "true");
+        }
+        if (statsRefreshTimePeriod > 0) {
+            System.setProperty("jqf.guidance.STATS_REFRESH_TIME_PERIOD", String.valueOf(statsRefreshTimePeriod));
         }
         if (libFuzzerCompatOutput != null) {
             System.setProperty("jqf.ei.LIBFUZZER_COMPAT_OUTPUT", libFuzzerCompatOutput);
@@ -328,6 +418,21 @@ public class FuzzGoal extends AbstractMojo {
                 duration = Duration.parse("PT"+time);
             } catch (DateTimeParseException e) {
                 throw new MojoExecutionException("Invalid time duration: " + time);
+            }
+        }
+
+        if (trackSemanticCoverage) {
+            if (!instrumentation.equals("fast")) {
+                throw new MojoExecutionException(
+                        "Semantic coverage can only be tracked using fast instrumentation, currently using: " + instrumentation);
+            }
+
+            System.setProperty("jqf.guidance.TRACK_SEMANTIC_COVERAGE", String.valueOf(true));
+            if (semanticAnalysisClasses != null) {
+                System.setProperty("janala.semanticAnalysisClasses", semanticAnalysisClasses);
+            } else {
+                throw new MojoExecutionException(
+                        "No semantic analysis classes specified. Specify with -DsemanticAnalysisClasses");
             }
         }
 
@@ -358,6 +463,9 @@ public class FuzzGoal extends AbstractMojo {
         Random rnd = randomSeed != null ? new Random(randomSeed) : new Random();
         try {
             switch (engine) {
+                case "bedivfuzz":
+                    guidance = new BeDivFuzzGuidance(targetName, duration, trials, resultsDir, seedsDir, rnd);
+                    break;
                 case "zest":
                     guidance = new ZestGuidance(targetName, duration, trials, resultsDir, seedsDir, rnd);
                     break;
@@ -369,12 +477,12 @@ public class FuzzGoal extends AbstractMojo {
                 default:
                     throw new MojoExecutionException("Unknown fuzzing engine: " + engine);
             }
-            guidance.setBlind(blind);
         } catch (FileNotFoundException e) {
             throw new MojoExecutionException("File not found", e);
         } catch (IOException e) {
             throw new MojoExecutionException("I/O error", e);
         }
+        guidance.setBlind(blind);
 
         try {
             result = GuidedFuzzing.run(testClassName, testMethod, loader, guidance, out);

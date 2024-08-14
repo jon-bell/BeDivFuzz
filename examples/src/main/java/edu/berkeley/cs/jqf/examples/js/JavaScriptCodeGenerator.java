@@ -54,11 +54,9 @@ public class JavaScriptCodeGenerator extends Generator<String> {
 
     private GenerationStatus status;
 
-    private static final int MAX_IDENTIFIERS = 50;
-    private static final int MAX_EXPRESSION_DEPTH = 7;
-    private static final int MAX_STATEMENT_DEPTH = 4;
-    private static final int MAX_INT = 5;
-
+    private static final int MAX_IDENTIFIERS = 100;
+    private static final int MAX_EXPRESSION_DEPTH = 10;
+    private static final int MAX_STATEMENT_DEPTH = 6;
     private static Set<String> identifiers;
     private int statementDepth;
     private int expressionDepth;
@@ -70,11 +68,17 @@ public class JavaScriptCodeGenerator extends Generator<String> {
     };
 
     private static final String[] BINARY_TOKENS = {
-            "!=", "!==", "%", "%=", "&", "&&", "&=", "*", "*=", "+", "+=", ",",
-            "-", "-=", "/", "/=", "<", "<<", ">>=", "<=", "=", "==", "===",
-            ">", ">=", ">>", ">>=", ">>>", ">>>=", "^", "^=", "|", "|=", "||",
+            "!=", "!==", "%", "&", "&&", "*", "+", ",",
+            "-", "/", "<", "<<", "<=", "=", "==", "===",
+            ">", ">=", ">>", ">>>", "^", "|", "||",
             "in", "instanceof"
     };
+
+    private static final String[] ASSIGNMENT_TOKENS = {
+            "=", "+=", "-=", "*=", "/=", "%=", "**=", "<<=", ">>=", ">>>=", "&=", "^=", "|=", "&&=",
+            "||=", "??=",
+    };
+
 
     @Override
     public String generate(SourceOfRandomness random, GenerationStatus status) {
@@ -92,10 +96,9 @@ public class JavaScriptCodeGenerator extends Generator<String> {
     }
 
     private static <T> List<T> generateItems(Function<SourceOfRandomness, T> generator, SourceOfRandomness random,
-                                             int max) {
-        int len = random.nextInt(max + 1);
+                                             double mean) {
+        int len = sampleGeometric(random, mean);
         List<T> items = new ArrayList<>(len);
-
         for (int i = 0; i < len; i++) {
             items.add(generator.apply(random));
         }
@@ -120,7 +123,8 @@ public class JavaScriptCodeGenerator extends Generator<String> {
                     this::generateFunctionNode,
                     this::generatePropertyNode,
                     this::generateIndexNode,
-                    this::generateArrowFunctionNode
+                    this::generateArrowFunctionNode,
+                    this::generateAssignmentNode
             )).apply(random);
         }
         expressionDepth--;
@@ -165,7 +169,7 @@ public class JavaScriptCodeGenerator extends Generator<String> {
     }
 
     private String generateBlock(SourceOfRandomness random) {
-        return "{ " + String.join(";", generateItems(this::generateStatement, random, MAX_INT)) + " }";
+        return "{ " + String.join(";", generateItems(this::generateStatement, random, 4)) + " }";
     }
 
     private String generateBlockStatement(SourceOfRandomness random) {
@@ -178,7 +182,7 @@ public class JavaScriptCodeGenerator extends Generator<String> {
 
     private String generateCallNode(SourceOfRandomness random) {
         String func = generateExpression(random);
-        String args = String.join(",", generateItems(this::generateExpression, random, MAX_INT));
+        String args = String.join(",", generateItems(this::generateExpression, random, 3));
 
         String call = func + "(" + args + ")";
         if (random.nextBoolean()) {
@@ -228,15 +232,15 @@ public class JavaScriptCodeGenerator extends Generator<String> {
     }
 
     private String generateFunctionNode(SourceOfRandomness random) {
-        return "function(" + String.join(", ", generateItems(this::generateIdentNode, random, MAX_INT)) + ")" + generateBlock(random);
+        return "function(" + String.join(", ", generateItems(this::generateIdentNode, random, 5)) + ")" + generateBlock(random);
     }
 
     private String generateNamedFunctionNode(SourceOfRandomness random) {
-        return "function " + generateIdentNode(random) + "(" + String.join(", ", generateItems(this::generateIdentNode, random, MAX_INT)) + ")" + generateBlock(random);
+        return "function " + generateIdentNode(random) + "(" + String.join(", ", generateItems(this::generateIdentNode, random, 5)) + ")" + generateBlock(random);
     }
 
     private String generateArrowFunctionNode(SourceOfRandomness random) {
-        String params = "(" + String.join(", ", generateItems(this::generateIdentNode, random, MAX_INT)) + ")";
+        String params = "(" + String.join(", ", generateItems(this::generateIdentNode, random, 3)) + ")";
         if (random.nextBoolean()) {
             return params + " => " + generateBlock(random);
         } else {
@@ -262,7 +266,7 @@ public class JavaScriptCodeGenerator extends Generator<String> {
         return "if (" +
                 generateExpression(random) + ") " +
                 generateBlock(random) +
-                (random.nextBoolean() ? generateBlock(random) : "");
+                (random.nextBoolean() ? " else " + generateBlock(random) : "");
     }
 
     private String generateIndexNode(SourceOfRandomness random) {
@@ -277,10 +281,10 @@ public class JavaScriptCodeGenerator extends Generator<String> {
         if (expressionDepth < MAX_EXPRESSION_DEPTH && random.nextBoolean()) {
             if (random.nextBoolean()) {
                 // Array literal
-                return "[" + String.join(", ", generateItems(this::generateExpression, random, MAX_INT)) + "]";
+                return "[" + String.join(", ", generateItems(this::generateExpression, random, 3)) + "]";
             } else {
                 // Object literal
-                return "{" + String.join(", ", generateItems(this::generateObjectProperty, random, MAX_INT)) + "}";
+                return "{" + String.join(", ", generateItems(this::generateObjectProperty, random, 3)) + "}";
 
             }
         } else {
@@ -305,7 +309,7 @@ public class JavaScriptCodeGenerator extends Generator<String> {
 
     private String generateSwitchNode(SourceOfRandomness random) {
         return "switch(" + generateExpression(random) + ") {"
-                + String.join(" ", generateItems(this::generateCaseNode, random, MAX_INT)) + "}";
+                + String.join(" ", generateItems(this::generateCaseNode, random, 2)) + "}";
     }
 
     private String generateTernaryNode(SourceOfRandomness random) {
@@ -332,5 +336,16 @@ public class JavaScriptCodeGenerator extends Generator<String> {
 
     private String generateWhileNode(SourceOfRandomness random) {
         return "while (" + generateExpression(random) + ")" + generateBlock(random);
+    }
+
+    private String generateAssignmentNode(SourceOfRandomness random) {
+        String token = random.choose(ASSIGNMENT_TOKENS);
+        String lhs = random.choose(Arrays.<Function<SourceOfRandomness, String>>asList(
+                this::generateIdentNode,
+                this::generateIndexNode,
+                this::generatePropertyNode
+        )).apply(random);
+        String rhs = generateExpression(random);
+        return lhs + " " + token + " " + rhs + ";";
     }
 }

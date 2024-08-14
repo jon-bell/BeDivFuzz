@@ -78,6 +78,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
         }
     }
 
+
     public static class Png extends KaitaiStruct {
 
         public Png(KaitaiStream _io) {
@@ -102,10 +103,12 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
 
         private void _write() {
             this.magic = this._io.ensureFixedContents(new byte[]{-119, 80, 78, 71, 13, 10, 26, 10});
-            this.ihdrLen = this._io.ensureFixedContents(new byte[]{0, 0, 0, 13});
-            this.ihdrType = this._io.ensureFixedContents(new byte[]{73, 72, 68, 82});
+            this.ihdrLen = this._io.ensureFixedContents(new byte[]{0, 0, 0, 13}); // Length of IHDR chunk
+            this.ihdrType = this._io.ensureFixedContents(new byte[]{73, 72, 68, 82}); // == "IHDR".getBytes()
             this.ihdr = new IhdrChunk(this._io, this, _root);
-            this.ihdrCrc = this._io.writeBytes(4);
+
+            this.ihdrCrc = writeCRC(12, 17);
+
             this.chunks = new ArrayList<Chunk>();
             while (!this._io.isEof()) {
                 Chunk chunk;
@@ -151,7 +154,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
             private int g;
             private int b;
             private Png _root;
-            private Png.PlteChunk _parent;
+            private PlteChunk _parent;
 
             public int r() {
                 return r;
@@ -169,7 +172,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.PlteChunk _parent() {
+            public PlteChunk _parent() {
                 return _parent;
             }
         }
@@ -194,7 +197,8 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
             }
 
             private void _write() {
-                this.len = this._io.writeU4be(0, this._io.buf.remaining());
+                this.len = this._io.writeU4be(0, this._io.buf.remaining()); // TODO: Ensure space for type & checksum
+                int crcStart = this._io.buf.position();
                 byte[][] types = {
                         "IEND".getBytes(),
                         "iTXt".getBytes(),
@@ -277,7 +281,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                         break;
                     }
                 }
-                this.crc = this._io.writeBytes(4);
+                this.crc = writeCRC(crcStart, (int) len + 4); // chunk-type + length
             }
 
             private long len;
@@ -342,7 +346,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
 
             private int paletteIndex;
             private Png _root;
-            private Png.BkgdChunk _parent;
+            private BkgdChunk _parent;
 
             public int paletteIndex() {
                 return paletteIndex;
@@ -352,7 +356,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.BkgdChunk _parent() {
+            public BkgdChunk _parent() {
                 return _parent;
             }
         }
@@ -405,7 +409,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
             private long xInt;
             private long yInt;
             private Png _root;
-            private Png.ChrmChunk _parent;
+            private ChrmChunk _parent;
 
             public long xInt() {
                 return xInt;
@@ -419,7 +423,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.ChrmChunk _parent() {
+            public ChrmChunk _parent() {
                 return _parent;
             }
         }
@@ -450,7 +454,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
 
             private int value;
             private Png _root;
-            private Png.BkgdChunk _parent;
+            private BkgdChunk _parent;
 
             public int value() {
                 return value;
@@ -460,7 +464,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.BkgdChunk _parent() {
+            public BkgdChunk _parent() {
                 return _parent;
             }
         }
@@ -497,7 +501,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
             private Point green;
             private Point blue;
             private Png _root;
-            private Png.Chunk _parent;
+            private Chunk _parent;
 
             public Point whitePoint() {
                 return whitePoint;
@@ -519,7 +523,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.Chunk _parent() {
+            public Chunk _parent() {
                 return _parent;
             }
         }
@@ -630,7 +634,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
 
             private ArrayList<Rgb> entries;
             private Png _root;
-            private Png.Chunk _parent;
+            private Chunk _parent;
 
             public ArrayList<Rgb> entries() {
                 return entries;
@@ -640,7 +644,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.Chunk _parent() {
+            public Chunk _parent() {
                 return _parent;
             }
         }
@@ -704,7 +708,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
 
             private Intent renderIntent;
             private Png _root;
-            private Png.Chunk _parent;
+            private Chunk _parent;
 
             public Intent renderIntent() {
                 return renderIntent;
@@ -714,7 +718,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.Chunk _parent() {
+            public Chunk _parent() {
                 return _parent;
             }
         }
@@ -750,7 +754,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
             private int compressionMethod;
             private byte[] textDatastream;
             private Png _root;
-            private Png.Chunk _parent;
+            private Chunk _parent;
             private ByteBuffer _raw_textDatastream;
 
             public String keyword() {
@@ -769,7 +773,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.Chunk _parent() {
+            public Chunk _parent() {
                 return _parent;
             }
 
@@ -808,7 +812,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
             private int green;
             private int blue;
             private Png _root;
-            private Png.BkgdChunk _parent;
+            private BkgdChunk _parent;
 
             public int red() {
                 return red;
@@ -826,7 +830,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.BkgdChunk _parent() {
+            public BkgdChunk _parent() {
                 return _parent;
             }
         }
@@ -867,7 +871,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
 
             private long gammaInt;
             private Png _root;
-            private Png.Chunk _parent;
+            private Chunk _parent;
 
             public long gammaInt() {
                 return gammaInt;
@@ -877,7 +881,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.Chunk _parent() {
+            public Chunk _parent() {
                 return _parent;
             }
         }
@@ -929,7 +933,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
 
             private KaitaiStruct bkgd;
             private Png _root;
-            private Png.Chunk _parent;
+            private Chunk _parent;
 
             public KaitaiStruct bkgd() {
                 return bkgd;
@@ -939,7 +943,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.Chunk _parent() {
+            public Chunk _parent() {
                 return _parent;
             }
         }
@@ -974,7 +978,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
             private long pixelsPerUnitY;
             private PhysUnit unit;
             private Png _root;
-            private Png.Chunk _parent;
+            private Chunk _parent;
 
             public long pixelsPerUnitX() {
                 return pixelsPerUnitX;
@@ -992,7 +996,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.Chunk _parent() {
+            public Chunk _parent() {
                 return _parent;
             }
         }
@@ -1033,7 +1037,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
             private String translatedKeyword;
             private String text;
             private Png _root;
-            private Png.Chunk _parent;
+            private Chunk _parent;
 
             public String keyword() {
                 return keyword;
@@ -1063,7 +1067,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.Chunk _parent() {
+            public Chunk _parent() {
                 return _parent;
             }
         }
@@ -1096,7 +1100,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
             private String keyword;
             private String text;
             private Png _root;
-            private Png.Chunk _parent;
+            private Chunk _parent;
 
             public String keyword() {
                 return keyword;
@@ -1110,7 +1114,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.Chunk _parent() {
+            public Chunk _parent() {
                 return _parent;
             }
         }
@@ -1151,7 +1155,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
             private int minute;
             private int second;
             private Png _root;
-            private Png.Chunk _parent;
+            private Chunk _parent;
 
             public int year() {
                 return year;
@@ -1181,7 +1185,7 @@ public class PngKaitaiGenerator extends AbstractKaitaiGenerator {
                 return _root;
             }
 
-            public Png.Chunk _parent() {
+            public Chunk _parent() {
                 return _parent;
             }
         }

@@ -11,7 +11,7 @@ print_usage() {
   echo "Usage: $0 [-c CLASSPATH] [-v] TEST_CLASS TEST_METHOD [OUT_DIR [SEED_FILES...]]"
 }
 
-while getopts ":c:vt:" opt; do
+while getopts ":c:r:vt:dfbm:uq" opt; do
   case $opt in
     /?)
       echo "Invalid option: -$OPTARG" >&2
@@ -21,11 +21,32 @@ while getopts ":c:vt:" opt; do
     c)
       export CLASSPATH="$OPTARG"
       ;;
+    r)
+      export JVM_OPTS="$JVM_OPTS -Djqf.guidance.STATS_REFRESH_TIME_PERIOD=$OPTARG"
+      ;;
     v)
       export JVM_OPTS="$JVM_OPTS -Djqf.logCoverage=true"
       ;;
     t)
       export JVM_OPTS="$JVM_OPTS -Djqf.ei.TIMEOUT=$OPTARG"
+      ;;
+    d)
+      debug=true
+      ;;
+    f)
+      export JVM_OPTS="$JVM_OPTS -DuseFastNonCollidingCoverageInstrumentation=true"
+      ;;
+    b)
+      export JVM_OPTS="$JVM_OPTS -Djqf.guidance.LOG_BRANCH_HIT_COUNTS=true"
+      ;;
+    m)
+      export JVM_OPTS="$JVM_OPTS -Djqf.guidance.METRICS=$OPTARG"
+      ;;
+    u)
+      export JVM_OPTS="$JVM_OPTS -Djqf.ei.LOG_UNIQUE_PATH_INPUTS=true"
+      ;;
+    q)
+      export JVM_OPTS="$JVM_OPTS -Djqf.ei.DISABLE_LOG_QUEUE=true"
       ;;
   esac
 done
@@ -37,7 +58,10 @@ if [ $# -lt 2 ]; then
   exit 1
 fi
 
-export JVM_OPTS="$JVM_OPTS -DuseFastNonCollidingCoverageInstrumentation=true"
 
 # Run the Zest input driver
-$ROOT_DIR/scripts/jqf-driver.sh edu.berkeley.cs.jqf.fuzz.ei.ZestDriver $@
+if [ "$debug" = true ] ; then
+  $ROOT_DIR/scripts/jqf-debug-driver.sh edu.berkeley.cs.jqf.fuzz.ei.ZestDriver $@
+else
+  $ROOT_DIR/scripts/jqf-driver.sh edu.berkeley.cs.jqf.fuzz.ei.ZestDriver $@
+fi

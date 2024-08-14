@@ -171,6 +171,14 @@ public class ReproGoal extends AbstractMojo {
     @Parameter(property="dumpArgsDir")
     private String dumpArgsDir;
 
+    /**
+     * The fuzzing engine used to create the test inputs.
+     *
+     * <p>One of 'zest', 'zeal', or 'bedivfuzz'. Default is 'bedivfuzz'.</p>
+     */
+    @Parameter(property="engine", defaultValue="bedivfuzz")
+    private String engine;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         ClassLoader loader;

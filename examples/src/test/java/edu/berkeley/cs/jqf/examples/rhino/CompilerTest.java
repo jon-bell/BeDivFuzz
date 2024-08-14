@@ -35,11 +35,11 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
 import com.pholser.junit.quickcheck.From;
-import de.hub.se.jqf.examples.js.SplitJavaScriptCodeGenerator;
+import de.hub.se.jqf.bedivfuzz.BeDivFuzz;
+import de.hub.se.jqf.bedivfuzz.examples.js.SplitJavaScriptCodeGenerator;
 import edu.berkeley.cs.jqf.examples.common.AsciiStringGenerator;
 import edu.berkeley.cs.jqf.examples.js.JavaScriptCodeGenerator;
 import edu.berkeley.cs.jqf.fuzz.Fuzz;
-import edu.berkeley.cs.jqf.fuzz.JQF;
 import org.apache.commons.io.IOUtils;
 import org.junit.After;
 import org.junit.Assume;
@@ -50,7 +50,7 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Script;
 
-@RunWith(JQF.class)
+@RunWith(BeDivFuzz.class)
 public class CompilerTest {
 
     private Context context;

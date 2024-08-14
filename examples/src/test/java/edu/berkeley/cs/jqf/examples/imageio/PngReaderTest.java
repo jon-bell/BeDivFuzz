@@ -31,22 +31,28 @@ package edu.berkeley.cs.jqf.examples.imageio;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
+import ar.com.hjg.pngj.PngReaderByte;
+import ar.com.hjg.pngj.PngjInputException;
 import com.pholser.junit.quickcheck.From;
 import com.pholser.junit.quickcheck.generator.Size;
+import de.hub.se.jqf.bedivfuzz.BeDivFuzz;
+import de.hub.se.jqf.bedivfuzz.examples.kaitai.SplitPngKaitaiGenerator;
+import edu.berkeley.cs.jqf.examples.common.ByteArrayWrapper;
+import edu.berkeley.cs.jqf.examples.kaitai.PngKaitaiByteArrayGenerator;
 import edu.berkeley.cs.jqf.examples.kaitai.PngKaitaiGenerator;
 import edu.berkeley.cs.jqf.fuzz.Fuzz;
-import edu.berkeley.cs.jqf.fuzz.JQF;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.runner.RunWith;
 
-@RunWith(JQF.class)
+@RunWith(BeDivFuzz.class)
 public class PngReaderTest {
 
     @BeforeClass
@@ -121,6 +127,19 @@ public class PngReaderTest {
     }
 
     @Fuzz
+    public void fuzzValidByteArrayMetadata(@From(PngKaitaiByteArrayGenerator.class) @Size(max = 256) ByteArrayWrapper bytes)  {
+        // Decode image from input stream
+        try {
+            InputStream input = new ByteArrayInputStream(bytes.getByteArray());
+            reader.setInput(ImageIO.createImageInputStream(input));
+            reader.getImageMetadata(0);
+        } catch (IOException e) {
+            Assume.assumeNoException(e);
+        }
+
+    }
+
+    @Fuzz
     public void fuzzValidImage(@From(PngKaitaiGenerator.class) @Size(max = 2048) InputStream input)  {
         // Decode image from input stream
         try {
@@ -143,6 +162,28 @@ public class PngReaderTest {
         Assume.assumeTrue(reader.getWidth(0) < 1024);
         // Parse PNG
         reader.read(0);
+    }
+
+    @Fuzz
+    public void testWithGenerator(@From(PngKaitaiGenerator.class) @Size(max = 1024) InputStream input){
+        try {
+            PngReaderByte reader = new PngReaderByte(input);
+            reader.getMetadata();
+            reader.close();
+        } catch (PngjInputException e) {
+            Assume.assumeNoException(e);
+        }
+    }
+
+    @Fuzz
+    public void testWithSplitGenerator(@From(SplitPngKaitaiGenerator.class) @Size(max = 1024) InputStream input){
+        try {
+            PngReaderByte reader = new PngReaderByte(input);
+            reader.getMetadata();
+            reader.close();
+        } catch (PngjInputException e) {
+            Assume.assumeNoException(e);
+        }
     }
 
 }

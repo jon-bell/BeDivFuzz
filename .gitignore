@@ -1,6 +1,8 @@
 .DS_Store
 build/
 target/
+scripts/slurm/results/
+.ipynb_checkpoints/
 *.iml
 *.pyc
 .cache/
@@ -14,3 +16,6 @@ apidocs/
 experiments/*-results-*
 *-results/
 .java-version
+.venv/
+*.pdf
+*.tar.gz

@@ -34,12 +34,12 @@ import java.io.InputStream;
 
 import com.pholser.junit.quickcheck.From;
 import com.pholser.junit.quickcheck.generator.Size;
-import de.hub.se.jqf.examples.xml.SplitXmlDocumentGenerator;
+import de.hub.se.jqf.bedivfuzz.BeDivFuzz;
+import de.hub.se.jqf.bedivfuzz.examples.xml.SplitXmlDocumentGenerator;
 import edu.berkeley.cs.jqf.examples.xml.XMLDocumentUtils;
 import edu.berkeley.cs.jqf.examples.xml.XmlDocumentGenerator;
 import edu.berkeley.cs.jqf.examples.common.Dictionary;
 import edu.berkeley.cs.jqf.fuzz.Fuzz;
-import edu.berkeley.cs.jqf.fuzz.JQF;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.DefaultModelReader;
 import org.apache.maven.model.io.ModelReader;
@@ -49,7 +49,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.w3c.dom.Document;
 
-@RunWith(JQF.class)
+@RunWith(BeDivFuzz.class)
 public class ModelReaderTest {
 
     @Fuzz

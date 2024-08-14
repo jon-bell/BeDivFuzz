@@ -41,12 +41,6 @@ import com.pholser.junit.quickcheck.generator.Generator;
 import com.pholser.junit.quickcheck.internal.ParameterTypeContext;
 import com.pholser.junit.quickcheck.internal.generator.GeneratorRepository;
 import com.pholser.junit.quickcheck.random.SourceOfRandomness;
-import de.hub.se.jqf.fuzz.div.BeDivFuzzGuidance;
-import de.hub.se.jqf.fuzz.div.SplitInput;
-import de.hub.se.jqf.fuzz.div.SplitLinearInput;
-import de.hub.se.jqf.fuzz.guidance.BeDivGuidance;
-import de.hub.se.jqf.fuzz.junit.quickcheck.NonTrackingSplitGenerationStatus;
-import de.hub.se.jqf.fuzz.junit.quickcheck.SplitSourceOfRandomness;
 import edu.berkeley.cs.jqf.fuzz.guidance.Guidance;
 import edu.berkeley.cs.jqf.fuzz.guidance.GuidanceException;
 import edu.berkeley.cs.jqf.fuzz.guidance.TimeoutException;
@@ -120,33 +114,20 @@ public class FuzzStatement extends Statement {
                     try {
 
                         // Generate input values
-                        if (guidance instanceof BeDivGuidance) {
-                            SplitInput input = ((BeDivGuidance) guidance).getSplitInput();
-                            StreamBackedRandom primaryRandomFile = new StreamBackedRandom(input.createPrimaryParameterStream(), Long.BYTES);
-                            StreamBackedRandom secondaryRandomFile = new StreamBackedRandom(input.createSecondaryParameterStream(), Long.BYTES);
-                            SplitSourceOfRandomness random = new SplitSourceOfRandomness(primaryRandomFile, secondaryRandomFile);
-                            GenerationStatus genStatus = new NonTrackingSplitGenerationStatus(random);
-                            args = generators.stream()
-                                    .map(g -> g.generate(random, genStatus))
-                                    .toArray();
-                        }
-                        else {
-                            StreamBackedRandom randomFile = new StreamBackedRandom(guidance.getInput(), Long.BYTES);
-                            SourceOfRandomness random = new SourceOfRandomness(randomFile);
-                            GenerationStatus genStatus = new NonTrackingGenerationStatus(random);
-                            args = generators.stream()
-                                    .map(g -> g.generate(random, genStatus))
-                                    .toArray();
-
-                        }
+                        StreamBackedRandom randomFile = new StreamBackedRandom(guidance.getInput(), Long.BYTES);
+                        SourceOfRandomness random = new FastSourceOfRandomness(randomFile);
+                        GenerationStatus genStatus = new NonTrackingGenerationStatus(random);
+                        args = generators.stream()
+                                .map(g -> g.generate(random, genStatus))
+                                .toArray();
 
                         // Let guidance observe the generated input args
                         guidance.observeGeneratedArgs(args);
                     } catch (IllegalStateException e) {
                         if (e.getCause() instanceof EOFException) {
                             // This happens when we reach EOF before reading all the random values.
-							// The only thing we can do is try again
-							continue;
+                            // The only thing we can do is try again
+                            continue;
                         } else {
                             throw e;
                         }

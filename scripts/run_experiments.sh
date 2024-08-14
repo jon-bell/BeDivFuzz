@@ -23,7 +23,7 @@ while getopts ":o:t:n:r" opt; do
       exit 1
       ;;
     o)
-      BASE_OUT_DIR="$OPTARG"
+      OUT_DIR="$OPTARG"
       ;;
     t)
       TIMEOUT="$OPTARG"
@@ -38,7 +38,6 @@ while getopts ":o:t:n:r" opt; do
 done
 shift $((OPTIND-1))
 
-OUT_DIR=$BASE_OUT_DIR/java-data
 mkdir -p $OUT_DIR
 
 # Set name of the log file depending on whether coverage replay is enabled or not
@@ -115,7 +114,7 @@ for bench_index in {0..5}; do
       echo "[$(date)] Skipped replay for RLCheck." >> $LOG_FILE
     fi
 
-    # Run jqf-bediv with default (simple) strategy (save new counts + new valid counts) 
+    # Run jqf-bedivfuzz with default (simple) strategy (save new counts + new valid counts)
     DIRNAME=${OUT_DIR}/bediv-simple-$BENCHMARK-$REP
     if dir_does_not_exist $DIRNAME ; then
       echo "[$(date)] Starting bediv-simple. Writing results to $DIRNAME." >> $LOG_FILE
@@ -125,7 +124,7 @@ for bench_index in {0..5}; do
       echo "[$(date)] Finished bediv-simple. No need to replay." >> $LOG_FILE
     fi
 
-    # Run jqf-bediv with -s heuristic (save new counts + new valid counts for new structures only) 
+    # Run jqf-bedivfuzz with -s heuristic (save new counts + new valid counts for new structures only)
     DIRNAME=${OUT_DIR}/bediv-structure-$BENCHMARK-$REP
     if dir_does_not_exist $DIRNAME ; then
       echo "[$(date)] Starting bediv-structure. Writing results to $DIRNAME." >> $LOG_FILE
